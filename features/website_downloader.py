@@ -30,7 +30,6 @@ def download_website(url, chat_id=None):
             return f"❌ خطا: وضعیت {r.status_code}"
         
         soup = BeautifulSoup(r.text, 'html.parser')
-        base_domain = urlparse(url).netloc
         zip_buffer = io.BytesIO()
         downloaded_files = set()
         asset_mapping = {}
@@ -82,7 +81,6 @@ def download_website(url, chat_id=None):
                     else:
                         save_path = f"assets/other/{filename}"
                     
-                    # جلوگیری از duplicate
                     if save_path in downloaded_files:
                         base, ext = os.path.splitext(save_path)
                         counter = 1
@@ -90,7 +88,6 @@ def download_website(url, chat_id=None):
                             counter += 1
                         save_path = f"{base}_{counter}{ext}"
                     
-                    # دانلود
                     try:
                         time.sleep(random.uniform(0.3, 0.8))
                         asset_resp = requests.get(asset_url, headers=headers, timeout=10)
@@ -104,7 +101,6 @@ def download_website(url, chat_id=None):
                         continue
                     new_path = save_path
                 
-                # اصلاح لینک در HTML
                 if new_path:
                     relative_path = os.path.join('..', new_path) if new_path.startswith('assets/') else new_path
                     if tag.name == 'link':
@@ -134,7 +130,6 @@ def download_website(url, chat_id=None):
                     new_css = re.sub(pattern, replacer, css_content)
                     zf.writestr(file_info.filename, new_css.encode('utf-8'))
             
-            # ذخیره HTML اصلاح شده
             zf.writestr('index.html', str(soup).encode('utf-8'))
             zf.writestr('info.txt', f"تعداد assets: {len(downloaded_files)}\nآدرس: {url}")
         
