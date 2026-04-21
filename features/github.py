@@ -8,15 +8,24 @@ GITHUB_TOKEN = os.environ.get("GH_TOKEN")
 def _headers():
     headers = {
         'Accept': 'application/vnd.github.v3+json',
-        'User-Agent': 'BaleBot/1.0'
+        'User-Agent': 'BaleBot/1.0 (https://github.com/yourbot)'
     }
     if GITHUB_TOKEN:
         headers['Authorization'] = f'token {GITHUB_TOKEN}'
     return headers
 
+def _log_response(resp, context):
+    logger.info(f"{context}: status={resp.status_code}, url={resp.url}")
+    if resp.status_code != 200:
+        try:
+            logger.error(f"{context} error body: {resp.text[:200]}")
+        except:
+            pass
+
 def search_repo(query):
     try:
         r = requests.get(f"https://api.github.com/search/repositories?q={query}&per_page=5", headers=_headers(), timeout=10)
+        _log_response(r, "search_repo")
         if r.status_code != 200:
             return None, "❌ خطا در ارتباط با گیت‌هاب"
         items = r.json().get("items", [])
@@ -39,6 +48,7 @@ def download_repo(repo_name):
     try:
         url = f"https://api.github.com/repos/{repo_name}/zipball"
         r = requests.get(url, headers=_headers(), timeout=50)
+        _log_response(r, "download_repo")
         if r.status_code != 200:
             return f"❌ خطا (کد {r.status_code})"
         temp_filename = f"{repo_name.replace('/', '-')}.zip"
@@ -58,7 +68,9 @@ def get_releases(repo_name):
     try:
         url = f"https://api.github.com/repos/{repo_name}/releases"
         r = requests.get(url, headers=_headers(), timeout=15)
+        _log_response(r, "get_releases")
         if r.status_code != 200:
+            # اگر خطا 404 بود، شاید ریپو خصوصی یا نامعتبر است
             return None, f"❌ خطا در دریافت ریلیزها (کد {r.status_code})"
         releases = r.json()
         if not releases:
@@ -84,22 +96,33 @@ def get_releases(repo_name):
 
 def get_release_assets(repo_name, tag_name):
     try:
-        # همیشه لیست releases را می‌گیریم (بدون استفاده از endpoint /tags/)
-        list_url = f"https://api.github.com/repos/{repo_name}/releases"
-        r = requests.get(list_url, headers=_headers(), timeout=15)
-        if r.status_code != 200:
-            return None, f"❌ خطا در دریافت لیست ریلیزها (کد {r.status_code})"
-        releases = r.json()
-        target_release = None
-        for rel in releases:
-            if rel["tag_name"] == tag_name:
-                target_release = rel
-                break
-        if not target_release:
-            return None, f"❌ ریلیز با تگ {tag_name} پیدا نشد."
-        assets = target_release.get("assets", [])
+        # روش اول: دریافت مستقیم با tag (این endpoint گاهی اوقات 404 می‌دهد)
+        url_direct = f"https://api.github.com/repos/{repo_name}/releases/tags/{tag_name}"
+        r_direct = requests.get(url_direct, headers=_headers(), timeout=15)
+        _log_response(r_direct, "get_release_assets_direct")
+        
+        if r_direct.status_code == 200:
+            assets = r_direct.json().get("assets", [])
+        else:
+            # Fallback: لیست releases را بگیر و tag را پیدا کن
+            url_list = f"https://api.github.com/repos/{repo_name}/releases"
+            r_list = requests.get(url_list, headers=_headers(), timeout=15)
+            _log_response(r_list, "get_release_assets_list")
+            if r_list.status_code != 200:
+                return None, f"❌ خطا در دریافت لیست ریلیزها (کد {r_list.status_code})"
+            releases = r_list.json()
+            target_release = None
+            for rel in releases:
+                if rel["tag_name"] == tag_name:
+                    target_release = rel
+                    break
+            if not target_release:
+                return None, f"❌ ریلیز با تگ {tag_name} پیدا نشد."
+            assets = target_release.get("assets", [])
+        
         if not assets:
             return None, "⚠️ این ریلیز هیچ فایل ضمیمه‌ای ندارد."
+        
         buttons = []
         for asset in assets:
             name = asset["name"]
@@ -117,9 +140,10 @@ def get_release_assets(repo_name, tag_name):
 
 def download_release_asset(repo_name, tag_name, asset_name):
     try:
-        # ابتدا لیست releases را بگیریم
-        list_url = f"https://api.github.com/repos/{repo_name}/releases"
-        r = requests.get(list_url, headers=_headers(), timeout=15)
+        # مشابه get_release_assets: ابتدا asset را پیدا کن
+        url_list = f"https://api.github.com/repos/{repo_name}/releases"
+        r = requests.get(url_list, headers=_headers(), timeout=15)
+        _log_response(r, "download_release_asset_list")
         if r.status_code != 200:
             return f"❌ خطا در دریافت لیست ریلیزها (کد {r.status_code})"
         releases = r.json()
