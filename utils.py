@@ -46,7 +46,6 @@ def send_message(chat_id, text, reply_markup=None):
         logger.error(f"sendMessage error: {e}")
 
 def send_document(chat_id, file_path, caption=""):
-    """ارسال فایل از روی مسیر (بدون فوروارد خودکار)"""
     url = BASE_URL + "sendDocument"
     with open(file_path, 'rb') as f:
         files = {"document": (os.path.basename(file_path), f, "application/octet-stream")}
@@ -71,7 +70,6 @@ def send_document(chat_id, file_path, caption=""):
             logger.error(f"sendDocument error: {e}")
 
 def send_bytes_as_document(chat_id, file_bytes, filename, caption=""):
-    """ارسال فایل از روی bytes"""
     url = BASE_URL + "sendDocument"
     files = {"document": (filename, file_bytes, "application/octet-stream")}
     data = {"chat_id": chat_id, "caption": caption}
@@ -95,18 +93,12 @@ def send_bytes_as_document(chat_id, file_bytes, filename, caption=""):
 
 # ========== توابع RAR ==========
 def create_rar_parts(file_path, base_name, part_size_mb=19):
-    """
-    تبدیل یک فایل به چند پارت RAR با حجم مشخص و رمزگذاری (در صورت وجود ARCHIVE_PASSWORD)
-    باز می‌گرداند: لیست نام فایل‌های پارت ساخته شده
-    """
     if not os.path.exists(file_path):
         logger.error(f"File not found: {file_path}")
         return []
-    
     part_size = f"{part_size_mb}m"
     password_part = f"-p{ARCHIVE_PASSWORD}" if ARCHIVE_PASSWORD else ""
     cmd = f'rar a -v{part_size} {password_part} "{base_name}.rar" "{file_path}"'
-    
     try:
         subprocess.run(shlex.split(cmd), check=True, capture_output=True, text=True, timeout=120)
         parts = []
@@ -121,7 +113,6 @@ def create_rar_parts(file_path, base_name, part_size_mb=19):
         return []
 
 def create_single_rar(file_path, output_name=None):
-    """ساخت یک فایل RAR بدون پارت بندی (برای فایل‌های کوچک)"""
     if not output_name:
         output_name = os.path.basename(file_path) + '.rar'
     password_part = f"-p{ARCHIVE_PASSWORD}" if ARCHIVE_PASSWORD else ""
