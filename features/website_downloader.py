@@ -10,7 +10,9 @@ from urllib.parse import urljoin, urlparse, urldefrag
 from utils import DEFAULT_HEADERS, logger
 
 def sanitize_filename(filename):
+    # حذف کاراکترهای نامجاز در zip
     filename = filename.replace('\x00', '').replace('<', '_').replace('>', '_').replace(':', '_').replace('"', '_').replace('|', '_').replace('?', '_').replace('*', '_').replace('\\', '_').replace('/', '_')
+    # محدود کردن طول
     if len(filename) > 200:
         name, ext = os.path.splitext(filename)
         filename = name[:190] + ext
@@ -31,76 +33,74 @@ def download_website(url, chat_id=None):
         
         soup = BeautifulSoup(r.text, 'html.parser')
         zip_buffer = io.BytesIO()
-        downloaded_files = set()
-        asset_mapping = {}
+        asset_mapping = {}  # url -> zip_path
         
-        # جمع‌آوری منابع بدون تکرار (استفاده از دیکشنری)
-        assets_dict = {}
+        # جمع‌آوری منابع
+        assets = []
         for link in soup.find_all('link', rel='stylesheet', href=True):
-            abs_url = urljoin(url, link['href'])
-            assets_dict[abs_url] = ('css', link)
+            assets.append(('css', urljoin(url, link['href']), link))
         for script in soup.find_all('script', src=True):
-            abs_url = urljoin(url, script['src'])
-            assets_dict[abs_url] = ('js', script)
+            assets.append(('js', urljoin(url, script['src']), script))
         for img in soup.find_all('img', src=True):
-            abs_url = urljoin(url, img['src'])
-            assets_dict[abs_url] = ('image', img)
+            assets.append(('image', urljoin(url, img['src']), img))
         for video in soup.find_all('video'):
             if video.get('src'):
-                abs_url = urljoin(url, video['src'])
-                assets_dict[abs_url] = ('video', video)
+                assets.append(('video', urljoin(url, video['src']), video))
             for source in video.find_all('source', src=True):
-                abs_url = urljoin(url, source['src'])
-                assets_dict[abs_url] = ('video', source)
+                assets.append(('video', urljoin(url, source['src']), source))
         for audio in soup.find_all('audio'):
             if audio.get('src'):
-                abs_url = urljoin(url, audio['src'])
-                assets_dict[abs_url] = ('audio', audio)
+                assets.append(('audio', urljoin(url, audio['src']), audio))
             for source in audio.find_all('source', src=True):
-                abs_url = urljoin(url, source['src'])
-                assets_dict[abs_url] = ('audio', source)
+                assets.append(('audio', urljoin(url, source['src']), source))
+        
+        # حذف تکراری‌ها بر اساس URL
+        unique_assets = {}
+        for asset_type, asset_url, tag in assets:
+            if asset_url not in unique_assets:
+                unique_assets[asset_url] = (asset_type, tag)
         
         with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zf:
-            for asset_url, (asset_type, tag) in assets_dict.items():
+            for asset_url, (asset_type, tag) in unique_assets.items():
                 asset_url, _ = urldefrag(asset_url)
                 parsed = urlparse(asset_url)
                 path = parsed.path
                 if not path or path == '/':
                     continue
-                filename = os.path.basename(path)
-                if not filename or '.' not in filename:
-                    filename = f"asset_{hash(asset_url)}.bin"
-                filename = sanitize_filename(filename)
+                # حذف leading slash
+                if path.startswith('/'):
+                    path = path[1:]
+                # ایجاد مسیر در zip با حفظ ساختار پوشه
                 if asset_type == 'css':
-                    save_path = f"assets/css/{filename}"
+                    zip_path = f"assets/css/{path}"
                 elif asset_type == 'js':
-                    save_path = f"assets/js/{filename}"
+                    zip_path = f"assets/js/{path}"
                 elif asset_type == 'image':
-                    save_path = f"assets/images/{filename}"
+                    zip_path = f"assets/images/{path}"
                 elif asset_type == 'video':
-                    save_path = f"assets/videos/{filename}"
+                    zip_path = f"assets/videos/{path}"
                 elif asset_type == 'audio':
-                    save_path = f"assets/audios/{filename}"
+                    zip_path = f"assets/audios/{path}"
                 else:
-                    save_path = f"assets/other/{filename}"
-                
-                # جلوگیری از duplicate name در zip
-                if save_path in downloaded_files:
-                    base, ext = os.path.splitext(save_path)
+                    zip_path = f"assets/other/{path}"
+                # پاکسازی کاراکترهای نامجاز
+                zip_path = sanitize_filename(zip_path)
+                # اگر مسیر تکراری بود (به دلیل normalization)، شماره اضافه کن
+                if zip_path in asset_mapping.values():
+                    base, ext = os.path.splitext(zip_path)
                     counter = 1
-                    while f"{base}_{counter}{ext}" in downloaded_files:
+                    while f"{base}_{counter}{ext}" in asset_mapping.values():
                         counter += 1
-                    save_path = f"{base}_{counter}{ext}"
+                    zip_path = f"{base}_{counter}{ext}"
                 
                 try:
                     time.sleep(random.uniform(0.3, 0.8))
                     asset_resp = requests.get(asset_url, headers=headers, timeout=10)
                     if asset_resp.status_code == 200:
-                        zf.writestr(save_path, asset_resp.content)
-                        downloaded_files.add(save_path)
-                        asset_mapping[asset_url] = save_path
+                        zf.writestr(zip_path, asset_resp.content)
+                        asset_mapping[asset_url] = zip_path
                         # اصلاح لینک در HTML
-                        relative_path = os.path.join('..', save_path) if save_path.startswith('assets/') else save_path
+                        relative_path = os.path.join('..', zip_path) if zip_path.startswith('assets/') else zip_path
                         if tag.name == 'link':
                             tag['href'] = relative_path
                         elif tag.name == 'script':
@@ -113,7 +113,7 @@ def download_website(url, chat_id=None):
                     logger.warning(f"Failed to download {asset_url}: {e}")
                     continue
             
-            # اصلاح CSS files (urlهای داخلی)
+            # اصلاح CSS files (تصاویر پس‌زمینه و فونت‌ها)
             for file_info in zf.filelist:
                 if file_info.filename.startswith('assets/css/'):
                     try:
@@ -136,7 +136,7 @@ def download_website(url, chat_id=None):
             
             # ذخیره HTML اصلاح شده
             zf.writestr('index.html', str(soup).encode('utf-8'))
-            zf.writestr('info.txt', f"تعداد assets: {len(downloaded_files)}\nآدرس: {url}")
+            zf.writestr('info.txt', f"تعداد assets: {len(asset_mapping)}\nآدرس: {url}")
         
         return zip_buffer.getvalue()
     except Exception as e:
