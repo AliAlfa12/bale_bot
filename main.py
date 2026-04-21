@@ -30,7 +30,6 @@ def get_updates(offset):
 def process_callback(chat_id, data):
     logger.info(f"Callback: {data} from {chat_id}")
     
-    # ========== منوی اصلی ==========
     if data == "menu_search":
         user_states[chat_id] = {"action": "waiting_for_repo", "context": "search"}
         ask_for_repo_name(chat_id)
@@ -69,7 +68,6 @@ def process_callback(chat_id, data):
             del user_states[chat_id]
         show_main_menu(chat_id)
     
-    # ========== گیت‌هاب ==========
     elif data.startswith("github_repo_"):
         repo = data[12:]
         btns = [
@@ -92,7 +90,6 @@ def process_callback(chat_id, data):
                 send_message(chat_id, f"📦 ریپو به {len(parts)} پارت RAR تقسیم شد")
                 for part_file in parts:
                     send_document(chat_id, part_file, f"📎 {part_file}")
-                # cleanup after sending
                 for part_file in parts:
                     try: os.remove(part_file)
                     except: pass
@@ -143,13 +140,11 @@ def process_callback(chat_id, data):
                 send_message(chat_id, result)
             show_main_menu(chat_id)
     
-    # ========== یوتیوب ==========
     elif data.startswith("youtube_video_"):
         url = data[14:]
         send_message(chat_id, "🎬 شروع دانلود ویدیو...")
         file_path, result = download_youtube_video(url, chat_id, send_message)
         if file_path:
-            # تبدیل به RAR پارت‌بندی شده
             base_name = os.path.splitext(os.path.basename(file_path))[0]
             parts = create_rar_parts(file_path, base_name, 19)
             os.remove(file_path)
@@ -260,7 +255,6 @@ def process_message(chat_id, text):
                     content = r.content
                     size_mb = len(content)/(1024*1024)
                     fname = urlparse(url).path.split("/")[-1] or "downloaded_file"
-                    # ذخیره موقت و سپس RAR
                     temp_file = fname
                     with open(temp_file, 'wb') as f:
                         f.write(content)
@@ -291,7 +285,6 @@ def process_message(chat_id, text):
             del user_states[chat_id]
             result = download_website(url, chat_id)
             if isinstance(result, bytes):
-                # وب‌سایت دانلود شده به صورت ZIP است، آن را به RAR تبدیل نمی‌کنیم (خودش ZIP است)
                 send_bytes_as_document(chat_id, result, "website.zip", "🌐 وب‌سایت دانلود شده")
             else:
                 send_message(chat_id, result)
@@ -321,7 +314,6 @@ def process_message(chat_id, text):
             send_message(chat_id, "🎬 چه نوع دانلودی انجام شود؟", reply_markup)
         return
     
-    # fallback
     if text == "/start":
         show_main_menu(chat_id)
     elif text == "/help":
