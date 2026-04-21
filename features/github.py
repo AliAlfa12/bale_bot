@@ -128,7 +128,7 @@ def get_release_assets(repo_name, tag_name):
             name = asset["name"]
             size_mb = asset["size"] / (1024*1024)
             downloads = asset.get("download_count", 0)
-            text = f"📎 {name} - {size_mb:.1f}MB - {downloads} دانلود"
+            text = f"📎 {name} - {size_mb:.1f}MB - {downloads}"
             callback_data = f"github_download_asset_{repo_name}|{tag_name}|{name}"
             buttons.append({"text": text, "callback_data": callback_data})
         buttons.append({"text": "🔙 برگشت به ریلیزها", "callback_data": f"releases_repo_{repo_name}"})
