@@ -69,7 +69,7 @@ def process_callback(chat_id, data):
         show_main_menu(chat_id)
     
     elif data.startswith("github_repo_"):
-        repo = data[12:]
+        repo = data[12:]  # len("github_repo_") = 12
         btns = [
             {"text": "📥 دانلود ریپو", "callback_data": f"download_repo_{repo}"},
             {"text": "🏷️ مشاهده ریلیزها", "callback_data": f"releases_repo_{repo}"},
@@ -79,7 +79,7 @@ def process_callback(chat_id, data):
         send_message(chat_id, f"📦 **{repo}**\nچه کاری انجام دهم؟", reply_markup)
     
     elif data.startswith("download_repo_"):
-        repo = data[14:]
+        repo = data[14:]  # len("download_repo_") = 14
         send_message(chat_id, f"⬇️ شروع دانلود {repo} ...")
         result = download_repo(repo)
         if isinstance(result, dict) and result.get("type") == "download":
@@ -98,7 +98,7 @@ def process_callback(chat_id, data):
         show_main_menu(chat_id)
     
     elif data.startswith("releases_repo_"):
-        repo = data[14:]
+        repo = data[14:]  # len("releases_repo_") = 14
         send_message(chat_id, f"🔍 در حال دریافت ریلیزهای {repo} ...")
         keyboard, error = get_releases(repo)
         if error:
@@ -107,8 +107,10 @@ def process_callback(chat_id, data):
         else:
             send_message(chat_id, f"🏷️ ریلیزهای {repo}:", reply_markup=keyboard)
     
+    # اصلاح شده: استفاده از len و split به جای ایندکس ثابت
     elif data.startswith("github_release_assets_"):
-        parts = data[21:].split("|")
+        rest = data[len("github_release_assets_"):]
+        parts = rest.split("|")
         if len(parts) == 2:
             repo, tag = parts
             send_message(chat_id, f"🔍 در حال دریافت فایل‌های ریلیز {tag} ...")
@@ -120,7 +122,8 @@ def process_callback(chat_id, data):
                 send_message(chat_id, f"📦 فایل‌های موجود در ریلیز {tag}:", reply_markup=keyboard)
     
     elif data.startswith("github_download_asset_"):
-        parts = data[20:].split("|")
+        rest = data[len("github_download_asset_"):]
+        parts = rest.split("|")
         if len(parts) == 3:
             repo, tag, asset_name = parts
             send_message(chat_id, f"⬇️ شروع دانلود {asset_name} ...")
@@ -141,7 +144,7 @@ def process_callback(chat_id, data):
             show_main_menu(chat_id)
     
     elif data.startswith("youtube_video_"):
-        url = data[14:]
+        url = data[14:]  # len("youtube_video_") = 14
         send_message(chat_id, "🎬 شروع دانلود ویدیو...")
         file_path, result = download_youtube_video(url, chat_id, send_message)
         if file_path:
@@ -165,7 +168,7 @@ def process_callback(chat_id, data):
         show_main_menu(chat_id)
     
     elif data.startswith("youtube_audio_"):
-        url = data[13:]
+        url = data[13:]  # len("youtube_audio_") = 13
         send_message(chat_id, "🎵 شروع دانلود صدا...")
         file_path, result = download_youtube_audio(url, chat_id, send_message)
         if file_path:
