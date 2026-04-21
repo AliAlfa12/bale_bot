@@ -2,7 +2,7 @@ import os
 import time
 import requests
 from urllib.parse import urlparse
-from utils import send_message, send_document, send_bytes_as_document, create_inline_keyboard, remove_reply_keyboard, logger, download_file_with_headers, create_rar_parts
+from utils import send_message, edit_message_text, send_document, send_bytes_as_document, create_inline_keyboard, remove_reply_keyboard, logger, download_file_with_headers, create_rar_parts
 from features.menu import show_main_menu, show_help, ask_for_repo_name, ask_for_command, ask_for_ai_question, ask_for_download_link, ask_for_website_url, ask_for_extract_links_url, ask_for_youtube_url
 from features.github import search_repo, download_repo, get_releases, get_release_assets, download_release_asset
 from features.shell import run_command
@@ -27,8 +27,8 @@ def get_updates(offset):
         logger.error(f"getUpdates error: {e}")
     return []
 
-def process_callback(chat_id, data):
-    logger.info(f"Callback: {data} from {chat_id}")
+def process_callback(chat_id, message_id, data):
+    logger.info(f"Callback: {data} from {chat_id}, message_id={message_id}")
     
     if data == "menu_search":
         user_states[chat_id] = {"action": "waiting_for_repo", "context": "search"}
@@ -68,19 +68,20 @@ def process_callback(chat_id, data):
             del user_states[chat_id]
         show_main_menu(chat_id)
     
+    # ========== ویرایش پیام برای گزینه‌های اینلاین ==========
     elif data.startswith("github_repo_"):
-        repo = data[12:]  # len("github_repo_") = 12
+        repo = data[12:]
         btns = [
             {"text": "📥 دانلود ریپو", "callback_data": f"download_repo_{repo}"},
             {"text": "🏷️ مشاهده ریلیزها", "callback_data": f"releases_repo_{repo}"},
             {"text": "🔙 برگشت به منو", "callback_data": "back_to_menu"}
         ]
         reply_markup = create_inline_keyboard(btns, columns=1)
-        send_message(chat_id, f"📦 **{repo}**\nچه کاری انجام دهم؟", reply_markup)
+        edit_message_text(chat_id, message_id, f"📦 **{repo}**\nچه کاری انجام دهم؟", reply_markup)
     
     elif data.startswith("download_repo_"):
-        repo = data[14:]  # len("download_repo_") = 14
-        send_message(chat_id, f"⬇️ شروع دانلود {repo} ...")
+        repo = data[14:]
+        edit_message_text(chat_id, message_id, f"⬇️ شروع دانلود {repo} ...", None)
         result = download_repo(repo)
         if isinstance(result, dict) and result.get("type") == "download":
             parts = result["parts"]
@@ -98,35 +99,34 @@ def process_callback(chat_id, data):
         show_main_menu(chat_id)
     
     elif data.startswith("releases_repo_"):
-        repo = data[14:]  # len("releases_repo_") = 14
-        send_message(chat_id, f"🔍 در حال دریافت ریلیزهای {repo} ...")
+        repo = data[14:]
+        edit_message_text(chat_id, message_id, f"🔍 در حال دریافت ریلیزهای {repo} ...", None)
         keyboard, error = get_releases(repo)
         if error:
             send_message(chat_id, error)
             show_main_menu(chat_id)
         else:
-            send_message(chat_id, f"🏷️ ریلیزهای {repo}:", reply_markup=keyboard)
+            edit_message_text(chat_id, message_id, f"🏷️ ریلیزهای {repo}:", keyboard)
     
-    # اصلاح شده: استفاده از len و split به جای ایندکس ثابت
     elif data.startswith("github_release_assets_"):
         rest = data[len("github_release_assets_"):]
         parts = rest.split("|")
         if len(parts) == 2:
             repo, tag = parts
-            send_message(chat_id, f"🔍 در حال دریافت فایل‌های ریلیز {tag} ...")
+            edit_message_text(chat_id, message_id, f"🔍 در حال دریافت فایل‌های ریلیز {tag} ...", None)
             keyboard, error = get_release_assets(repo, tag)
             if error:
                 send_message(chat_id, error)
                 show_main_menu(chat_id)
             else:
-                send_message(chat_id, f"📦 فایل‌های موجود در ریلیز {tag}:", reply_markup=keyboard)
+                edit_message_text(chat_id, message_id, f"📦 فایل‌های موجود در ریلیز {tag}:", keyboard)
     
     elif data.startswith("github_download_asset_"):
         rest = data[len("github_download_asset_"):]
         parts = rest.split("|")
         if len(parts) == 3:
             repo, tag, asset_name = parts
-            send_message(chat_id, f"⬇️ شروع دانلود {asset_name} ...")
+            edit_message_text(chat_id, message_id, f"⬇️ شروع دانلود {asset_name} ...", None)
             result = download_release_asset(repo, tag, asset_name)
             if isinstance(result, dict) and result.get("type") == "download":
                 plist = result["parts"]
@@ -143,9 +143,10 @@ def process_callback(chat_id, data):
                 send_message(chat_id, result)
             show_main_menu(chat_id)
     
+    # ========== یوتیوب ==========
     elif data.startswith("youtube_video_"):
-        url = data[14:]  # len("youtube_video_") = 14
-        send_message(chat_id, "🎬 شروع دانلود ویدیو...")
+        url = data[14:]
+        edit_message_text(chat_id, message_id, "🎬 شروع دانلود ویدیو...", None)
         file_path, result = download_youtube_video(url, chat_id, send_message)
         if file_path:
             base_name = os.path.splitext(os.path.basename(file_path))[0]
@@ -168,8 +169,8 @@ def process_callback(chat_id, data):
         show_main_menu(chat_id)
     
     elif data.startswith("youtube_audio_"):
-        url = data[13:]  # len("youtube_audio_") = 13
-        send_message(chat_id, "🎵 شروع دانلود صدا...")
+        url = data[13:]
+        edit_message_text(chat_id, message_id, "🎵 شروع دانلود صدا...", None)
         file_path, result = download_youtube_audio(url, chat_id, send_message)
         if file_path:
             base_name = os.path.splitext(os.path.basename(file_path))[0]
@@ -354,12 +355,13 @@ def main():
                 if "callback_query" in upd:
                     cb = upd["callback_query"]
                     chat_id = cb["message"]["chat"]["id"]
+                    message_id = cb["message"]["message_id"]
                     data = cb["data"]
                     try:
                         requests.post(f"https://tapi.bale.ai/bot{os.environ['BALE_TOKEN']}/answerCallbackQuery", json={"callback_query_id": cb["id"]})
                     except:
                         pass
-                    process_callback(chat_id, data)
+                    process_callback(chat_id, message_id, data)
                 elif "message" in upd:
                     msg = upd["message"]
                     chat_id = msg["chat"]["id"]
