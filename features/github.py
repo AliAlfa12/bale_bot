@@ -6,7 +6,10 @@ from utils import create_rar_parts, create_inline_keyboard, download_file_with_h
 GITHUB_TOKEN = os.environ.get("GH_TOKEN")
 
 def _headers():
-    headers = {'Accept': 'application/vnd.github.v3+json'}
+    headers = {
+        'Accept': 'application/vnd.github.v3+json',
+        'User-Agent': 'BaleBot/1.0'
+    }
     if GITHUB_TOKEN:
         headers['Authorization'] = f'token {GITHUB_TOKEN}'
     return headers
@@ -81,25 +84,31 @@ def get_releases(repo_name):
 
 def get_release_assets(repo_name, tag_name):
     try:
+        # روش اول: مستقیم با تگ
         url = f"https://api.github.com/repos/{repo_name}/releases/tags/{tag_name}"
         r = requests.get(url, headers=_headers(), timeout=15)
         if r.status_code == 404:
-            # fallback
+            # روش دوم: fallback به لیست releases
             list_url = f"https://api.github.com/repos/{repo_name}/releases"
             r2 = requests.get(list_url, headers=_headers(), timeout=15)
-            if r2.status_code == 200:
-                for rel in r2.json():
-                    if rel["tag_name"] == tag_name:
-                        assets = rel.get("assets", [])
-                        break
-                else:
-                    return None, f"❌ ریلیز با تگ {tag_name} پیدا نشد."
-            else:
-                return None, f"❌ خطا در دریافت اطلاعات ریلیز (کد {r.status_code})"
+            if r2.status_code != 200:
+                return None, f"❌ خطا در دریافت اطلاعات ریلیز (کد {r2.status_code})"
+            releases = r2.json()
+            assets = None
+            for rel in releases:
+                if rel["tag_name"] == tag_name:
+                    assets = rel.get("assets", [])
+                    break
+            if assets is None:
+                return None, f"❌ ریلیز با تگ {tag_name} پیدا نشد."
         else:
+            if r.status_code != 200:
+                return None, f"❌ خطا در دریافت اطلاعات ریلیز (کد {r.status_code})"
             assets = r.json().get("assets", [])
+        
         if not assets:
             return None, "⚠️ این ریلیز هیچ فایل ضمیمه‌ای ندارد."
+        
         buttons = []
         for asset in assets:
             name = asset["name"]
@@ -117,19 +126,36 @@ def get_release_assets(repo_name, tag_name):
 
 def download_release_asset(repo_name, tag_name, asset_name):
     try:
+        # دریافت اطلاعات ریلیز (با fallback)
         url = f"https://api.github.com/repos/{repo_name}/releases/tags/{tag_name}"
         r = requests.get(url, headers=_headers(), timeout=15)
-        if r.status_code != 200:
-            return f"❌ خطا در دریافت ریلیز (کد {r.status_code})"
-        release = r.json()
-        target = None
-        for asset in release.get("assets", []):
+        if r.status_code == 404:
+            list_url = f"https://api.github.com/repos/{repo_name}/releases"
+            r2 = requests.get(list_url, headers=_headers(), timeout=15)
+            if r2.status_code != 200:
+                return f"❌ خطا در دریافت اطلاعات ریلیز (کد {r2.status_code})"
+            releases = r2.json()
+            target_release = None
+            for rel in releases:
+                if rel["tag_name"] == tag_name:
+                    target_release = rel
+                    break
+            if not target_release:
+                return f"❌ ریلیز با تگ {tag_name} پیدا نشد."
+            assets = target_release.get("assets", [])
+        else:
+            if r.status_code != 200:
+                return f"❌ خطا در دریافت اطلاعات ریلیز (کد {r.status_code})"
+            assets = r.json().get("assets", [])
+        
+        target_asset = None
+        for asset in assets:
             if asset["name"] == asset_name:
-                target = asset
+                target_asset = asset
                 break
-        if not target:
+        if not target_asset:
             return f"❌ Asset '{asset_name}' یافت نشد"
-        download_url = target["browser_download_url"]
+        download_url = target_asset["browser_download_url"]
         response = download_file_with_headers(download_url, timeout=60)
         if not response or response.status_code != 200:
             return f"❌ خطا در دانلود (کد {response.status_code if response else 'No response'})"
