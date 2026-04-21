@@ -45,6 +45,23 @@ def send_message(chat_id, text, reply_markup=None):
     except Exception as e:
         logger.error(f"sendMessage error: {e}")
 
+def edit_message_text(chat_id, message_id, text, reply_markup=None):
+    """ویرایش متن و کیبورد یک پیام قبلی"""
+    url = BASE_URL + "editMessageText"
+    payload = {
+        "chat_id": chat_id,
+        "message_id": message_id,
+        "text": text,
+        "parse_mode": "Markdown"
+    }
+    if reply_markup:
+        payload["reply_markup"] = reply_markup
+    try:
+        requests.post(url, json=payload, timeout=30)
+        logger.info(f"Edited message {message_id} in chat {chat_id}")
+    except Exception as e:
+        logger.error(f"editMessageText error: {e}")
+
 def send_document(chat_id, file_path, caption=""):
     url = BASE_URL + "sendDocument"
     with open(file_path, 'rb') as f:
