@@ -2,7 +2,7 @@ from utils import send_message, create_inline_keyboard, remove_reply_keyboard
 
 def show_main_menu(chat_id):
     buttons = [
-        {"text": "🔍 جستجوی ریپو گیت‌هاب", "callback_data": "menu_search"},
+        {"text": "🔍 جستجو در گیت‌هاب", "callback_data": "menu_search"},  # تغییر نام
         {"text": "📦 دانلود ریپو", "callback_data": "menu_download"},
         {"text": "🏷️ مشاهده ریلیزها", "callback_data": "menu_releases"},
         {"text": "💻 اجرای دستور لینوکسی", "callback_data": "menu_cli"},
@@ -20,8 +20,8 @@ def show_main_menu(chat_id):
 def show_help(chat_id):
     text = (
         "📚 **راهنمای ربات**\n\n"
-        "🔍 جستجوی ریپو گیت‌هاب\n"
-        "📦 دانلود ریپو (آخرین نسخه)\n"
+        "🔍 جستجو در گیت‌هاب (با نام ریپو یا نام کاربری)\n"
+        "📦 دانلود ریپو (با فرمت owner/repo)\n"
         "🏷️ مشاهده ریلیزها و دانلود نسخه خاص\n"
         "💻 اجرای دستورات لینوکسی (ls, ping -c 4, curl, ...)\n"
         "🤖 سوال از هوش مصنوعی (Gemini)\n"
@@ -30,14 +30,14 @@ def show_help(chat_id):
         "🔗 استخراج تمام لینک‌های یک وب‌سایت\n"
         "🎬 دانلود ویدیو و صدا از یوتیوب\n"
         "📡 تست دسترسی به سایت‌های معروف\n\n"
-        "⚠️ فایل‌های بزرگتر از 20MB به چند پارت تقسیم می‌شوند\n"
-        "⚠️ فایل‌های دانلود شده با فرمت RAR رمزگذاری می‌شوند"
+        "⚠️ فایل‌های بزرگتر از 20MB به چند پارت RAR تقسیم می‌شوند\n"
+        "⚠️ فایل‌های دانلود شده با رمز عبور (در صورت تنظیم) محافظت می‌شوند"
     )
     send_message(chat_id, text)
 
 # توابع ask_for_* (بدون تغییر)
 def ask_for_repo_name(chat_id):
-    msg = "لطفاً نام ریپو را به فرم `owner/repo` وارد کنید:\nمثال: `fastapi/fastapi`"
+    msg = "لطفاً عبارت جستجو را وارد کنید:\n- برای ریپوی دقیق: `owner/repo`\n- برای جستجوی کلی: یک کلمه (مثل `deltachat`)"
     send_message(chat_id, msg, reply_markup=remove_reply_keyboard())
 
 def ask_for_command(chat_id):
