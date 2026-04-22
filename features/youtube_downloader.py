@@ -1,37 +1,32 @@
 import yt_dlp
 import os
+import time
 import subprocess
-from utils import ensure_ffmpeg
+from utils import ensure_ffmpeg, logger
 
 ensure_ffmpeg()
 
 def download_youtube_video(url, chat_id, send_message_func):
-    """دانلود ویدیو با گزینه‌های جلوگیری از تشخیص ربات"""
     send_message_func(chat_id, "🎬 در حال دریافت اطلاعات ویدیو...")
-    
     try:
         ydl_opts = {
+            'username': 'oauth2',
+            'password': '',
             'format': 'best[height<=720]',
             'outtmpl': '%(title)s.%(ext)s',
             'quiet': True,
             'no_warnings': True,
-            'extract_flat': False,
-            # گزینه‌های جدید برای دور زدن محدودیت ربات
             'extractor_args': {'youtube': {'skip': ['webpage']}},
             'no_check_certificate': True,
             'prefer_insecure': True,
         }
-        
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=False)
             video_title = info.get('title', 'video')
             video_duration = info.get('duration', 0)
             video_size_mb = info.get('filesize', 0) / (1024 * 1024)
-            
             send_message_func(chat_id, f"📹 **{video_title}**\n⏱️ مدت: {video_duration // 60}:{video_duration % 60:02d}\n📦 حجم: {video_size_mb:.1f}MB\n\n⬇️ دانلود...")
             ydl.download([url])
-            
-            # پیدا کردن فایل
             downloaded_file = None
             for file in os.listdir('.'):
                 if file.endswith(('.mp4', '.mkv', '.webm')):
@@ -45,15 +40,15 @@ def download_youtube_video(url, chat_id, send_message_func):
     except Exception as e:
         error_msg = str(e)
         if "Sign in to confirm" in error_msg:
-            return None, "❌ یوتیوب درخواست ورود دارد. لطفاً بعداً تلاش کنید یا از ویدیوهای عمومی استفاده کنید."
+            return None, "❌ یوتیوب درخواست ورود دارد. لطفاً ابتدا با دستور زیر لاگین کنید: python -m yt_dlp --username oauth2 --password '' https://www.youtube.com/watch?v=test"
         return None, f"❌ خطا: {error_msg[:100]}"
 
 def download_youtube_audio(url, chat_id, send_message_func):
-    """دانلود صدا با گزینه‌های جلوگیری از تشخیص ربات"""
     send_message_func(chat_id, "🎵 در حال دریافت اطلاعات...")
-    
     try:
         ydl_opts = {
+            'username': 'oauth2',
+            'password': '',
             'format': 'bestaudio/best',
             'postprocessors': [{
                 'key': 'FFmpegExtractAudio',
@@ -67,14 +62,12 @@ def download_youtube_audio(url, chat_id, send_message_func):
             'no_check_certificate': True,
             'prefer_insecure': True,
         }
-        
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=False)
             audio_title = info.get('title', 'audio')
             video_duration = info.get('duration', 0)
             send_message_func(chat_id, f"🎵 **{audio_title}**\n⏱️ مدت: {video_duration // 60}:{video_duration % 60:02d}\n\n⬇️ استخراج صدا...")
             ydl.download([url])
-            
             downloaded_file = None
             for file in os.listdir('.'):
                 if file.endswith('.mp3'):
@@ -88,5 +81,5 @@ def download_youtube_audio(url, chat_id, send_message_func):
     except Exception as e:
         error_msg = str(e)
         if "Sign in to confirm" in error_msg:
-            return None, "❌ یوتیوب درخواست ورود دارد. لطفاً بعداً تلاش کنید."
+            return None, "❌ یوتیوب درخواست ورود دارد. لطفاً ابتدا با دستور زیر لاگین کنید: python -m yt_dlp --username oauth2 --password '' https://www.youtube.com/watch?v=test"
         return None, f"❌ خطا: {error_msg[:100]}"
