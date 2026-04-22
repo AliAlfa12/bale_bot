@@ -204,3 +204,54 @@ def clean_files_safe(file_list):
             logger.error(f"Permission denied for {file_path}")
         except Exception as e:
             logger.error(f"Error cleaning {file_path}: {e}")
+
+# ========== ✅ NEW: تابع صحیح کردن نام وبسایت برای استفاده در اسم فایل ==========
+def sanitize_website_name(url):
+    """
+    تبدیل URL به یک نام فایل معتبر
+    - حذف کاراکترهای غیرمعتبر
+    - تبدیل کاراکترهای خاص به معادل معمولی
+    - محدود کردن طول
+    """
+    # پاک کردن http:// و https://
+    clean_url = url.replace('https://', '').replace('http://', '')
+    # حذف www.
+    clean_url = clean_url.replace('www.', '')
+    # حذف / و query strings
+    clean_url = clean_url.split('/')[0].split('?')[0]
+    
+    # تعویض کاراکترهای مورد نیاز
+    replacements = {
+        '.': '_',      # نقطه به زیرخط
+        ':': '_',      # دو نقطه به زیرخط
+        ' ': '_',      # فضا به زیرخط
+        '"': '',       # حذف علامت گذاری
+        "'": '',       # حذف تک نقل
+        '?': '',       # حذف سوالی
+        '*': '',       # حذف ستاره
+        '<': '_',      # زاویه چپ
+        '>': '_',      # زاویه راست
+        '|': '_',      # پایپ
+        '\\': '_',     # بک اسلش
+        '/': '_',      # فرورد اسلش
+    }
+    
+    for old_char, new_char in replacements.items():
+        clean_url = clean_url.replace(old_char, new_char)
+    
+    # حذف کاراکترهای پی‌درپی مشابه
+    while '__' in clean_url:
+        clean_url = clean_url.replace('__', '_')
+    
+    # حذف زیرخط از ابتدا و انتها
+    clean_url = clean_url.strip('_')
+    
+    # محدود کردن طول به ۵۰ کاراکتر
+    if len(clean_url) > 50:
+        clean_url = clean_url[:50].rstrip('_')
+    
+    # اگر خالی باشد، نام پیشفرض
+    if not clean_url:
+        clean_url = 'website'
+    
+    return clean_url
