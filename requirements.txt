@@ -1,3 +1,4 @@
 requests==2.31.0
 beautifulsoup4==4.12.2
+yt-dlp-invidious
 git+https://github.com/coletdjnz/yt-dlp-youtube-oauth2.git
