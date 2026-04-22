@@ -56,9 +56,10 @@ def download_youtube_audio(url, chat_id, send_message_func):
                 'preferredquality': '192',
             }],
             'outtmpl': '%(title)s.%(ext)s',
-            'quiet': True,
-            'no_warnings': True,
-            'extractor_args': {'youtube': {'skip': ['webpage']}},
+                'verbose': True,     # برای دیدن لاگ‌های دقیق و عیب‌یابی
+            'quiet': False,      # خاموش نبودن خروجی
+            'no_warnings': False, # نشان دادن تمام هشدارها
+            'extractor_args': {'youtube': {'player_client': ['ios', 'web']}}, # استفاده از کلاینت‌های مختلف برای دور زدن محدودی
             'no_check_certificate': True,
             'prefer_insecure': True,
         }
