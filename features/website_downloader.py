@@ -10,9 +10,7 @@ from urllib.parse import urljoin, urlparse, urldefrag
 from utils import DEFAULT_HEADERS, logger
 
 def sanitize_filename(filename):
-    # حذف کاراکترهای نامجاز در zip
     filename = filename.replace('\x00', '').replace('<', '_').replace('>', '_').replace(':', '_').replace('"', '_').replace('|', '_').replace('?', '_').replace('*', '_').replace('\\', '_').replace('/', '_')
-    # محدود کردن طول
     if len(filename) > 200:
         name, ext = os.path.splitext(filename)
         filename = name[:190] + ext
@@ -35,14 +33,13 @@ def download_website(url, chat_id=None):
         zip_buffer = io.BytesIO()
         asset_mapping = {}  # url -> zip_path
         
-        # ✅ IMPROVED: جمع‌آوری بهتر منابع (تصاویر، کتاب‌خانه‌ها و غیره)
         assets = []
         
-        # ✅ استخراج CSS
+        # استخراج CSS
         for link in soup.find_all('link', rel='stylesheet', href=True):
             assets.append(('css', urljoin(url, link['href']), link))
         
-        # ✅ استخراج JavaScript
+        # استخراج JavaScript
         for script in soup.find_all('script', src=True):
             assets.append(('js', urljoin(url, script['src']), script))
         
@@ -89,7 +86,7 @@ def download_website(url, chat_id=None):
                 try:
                     asset_url, _ = urldefrag(asset_url)
                     
-                    # ✅ skip data URLs
+                    # skip data URLs
                     if asset_url.startswith('data:'):
                         continue
                     
@@ -128,7 +125,7 @@ def download_website(url, chat_id=None):
                             counter += 1
                         zip_path = f"{base}_{counter}{ext}"
                     
-                    # ✅ IMPROVED: دانلود با retry و timeout بهتر
+                    # دانلود با retry و timeout بهتر
                     time.sleep(random.uniform(0.1, 0.3))
                     asset_resp = requests.get(
                         asset_url, 
@@ -138,7 +135,7 @@ def download_website(url, chat_id=None):
                     )
                     
                     if asset_resp.status_code == 200:
-                        # ✅ بررسی اندازه (حداکثر 50MB به ازای هر فایل)
+                        # بررسی اندازه (حداکثر 50MB به ازای هر فایل)
                         if len(asset_resp.content) > 50 * 1024 * 1024:
                             logger.warning(f"File too large, skipping: {asset_url}")
                             continue
@@ -147,9 +144,11 @@ def download_website(url, chat_id=None):
                         asset_mapping[asset_url] = zip_path
                         downloaded_count += 1
                         
-                        # اصلاح لینک در HTML
+                        # ✅ FIXED: اصلاح لینک در HTML - حالا صحیح کار می‌کند
                         if tag and hasattr(tag, 'name'):
-                            relative_path = os.path.join('..', zip_path) if zip_path.startswith('assets/') else zip_path
+                            # مسیر نسبی صحیح برای دسترسی از index.html
+                            relative_path = zip_path
+                            
                             if tag.name == 'link':
                                 tag['href'] = relative_path
                             elif tag.name == 'script':
@@ -182,10 +181,8 @@ def download_website(url, chat_id=None):
                         def replacer(m):
                             orig = m.group(1)
                             if orig.startswith(('http', 'data:')) or orig.startswith('/'):
-                                # اگر URL خارجی یا data URL است
                                 if orig.startswith('data:'):
                                     return m.group(0)
-                                # اگر absolute path است
                                 if orig.startswith('/'):
                                     abs_url = urljoin(url, orig)
                                 else:
@@ -196,7 +193,8 @@ def download_website(url, chat_id=None):
                             abs_url, _ = urldefrag(abs_url)
                             
                             if abs_url in asset_mapping:
-                                return f"url('../{asset_mapping[abs_url]}')"
+                                # ✅ مسیر صحیح برای CSS فایل
+                                return f"url('{asset_mapping[abs_url]}')"
                             return m.group(0)
                         
                         new_css = re.sub(pattern, replacer, css_content)
@@ -206,7 +204,7 @@ def download_website(url, chat_id=None):
             
             # ✅ ذخیره HTML اصلاح شده
             zf.writestr('index.html', str(soup).encode('utf-8'))
-            zf.writestr('info.txt', f"تعداد منابع دانلود شده: {downloaded_count}\nآدرس: {url}")
+            zf.writestr('info.txt', f"تعداد منابع دانلود شده: {downloaded_count}\nآدرس: {url}\n\nنکات:\n- تمام عکس‌ها، فایل‌های CSS و JavaScript در پوشه assets موجود است\n- اگر برخی عکس‌ها لود نشد، ممکن است به دلیل محدودیت‌های CORS یا سرور باشد\n- برای باز کردن: index.html را در مرورگر باز کنید")
         
         logger.info(f"Website download completed: {len(zip_buffer.getvalue())} bytes")
         return zip_buffer.getvalue()
