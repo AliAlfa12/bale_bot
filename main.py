@@ -4,7 +4,7 @@ import requests
 from urllib.parse import urlparse
 from utils import send_message, edit_message_text, send_document, send_bytes_as_document, create_inline_keyboard, remove_reply_keyboard, logger, download_file_with_headers, create_rar_parts
 from features.menu import show_main_menu, show_help, ask_for_repo_name, ask_for_command, ask_for_ai_question, ask_for_download_link, ask_for_website_url, ask_for_extract_links_url, ask_for_youtube_url
-from features.github import search_repo, download_repo, get_releases, get_release_assets, download_release_asset
+from features.github import search_github, get_user_repos, download_repo, get_releases, get_release_assets, download_release_asset
 from features.shell import run_command
 from features.ai import ask_gemini
 from features.network_test import test_site_accessibility
@@ -30,6 +30,7 @@ def get_updates(offset):
 def process_callback(chat_id, message_id, data):
     logger.info(f"Callback: {data} from {chat_id}, message_id={message_id}")
     
+    # ========== منوی اصلی ==========
     if data == "menu_search":
         user_states[chat_id] = {"action": "waiting_for_repo", "context": "search"}
         ask_for_repo_name(chat_id)
@@ -68,7 +69,7 @@ def process_callback(chat_id, message_id, data):
             del user_states[chat_id]
         show_main_menu(chat_id)
     
-    # ========== ویرایش پیام برای گزینه‌های اینلاین ==========
+    # ========== جستجوی گیت‌هاب (ریپو یا کاربر) ==========
     elif data.startswith("github_repo_"):
         repo = data[12:]
         btns = [
@@ -79,6 +80,17 @@ def process_callback(chat_id, message_id, data):
         reply_markup = create_inline_keyboard(btns, columns=1)
         edit_message_text(chat_id, message_id, f"📦 **{repo}**\nچه کاری انجام دهم؟", reply_markup)
     
+    elif data.startswith("github_user_"):
+        username = data[12:]  # len("github_user_") = 12
+        edit_message_text(chat_id, message_id, f"🔍 در حال دریافت ریپوهای کاربر {username}...", None)
+        keyboard, error = get_user_repos(username)
+        if error:
+            send_message(chat_id, error)
+            show_main_menu(chat_id)
+        else:
+            edit_message_text(chat_id, message_id, f"📁 ریپوهای {username}:", keyboard)
+    
+    # ========== دانلود مستقیم ریپو ==========
     elif data.startswith("download_repo_"):
         repo = data[14:]
         edit_message_text(chat_id, message_id, f"⬇️ شروع دانلود {repo} ...", None)
@@ -98,6 +110,7 @@ def process_callback(chat_id, message_id, data):
             send_message(chat_id, result)
         show_main_menu(chat_id)
     
+    # ========== ریلیزها ==========
     elif data.startswith("releases_repo_"):
         repo = data[14:]
         edit_message_text(chat_id, message_id, f"🔍 در حال دریافت ریلیزهای {repo} ...", None)
@@ -201,9 +214,10 @@ def process_message(chat_id, text):
             repo = text.strip()
             ctx = state.get("context", "search")
             del user_states[chat_id]
+            
             if ctx == "search":
                 send_message(chat_id, f"🔍 در حال جستجوی {repo} ...")
-                keyboard, err = search_repo(repo)
+                keyboard, err = search_github(repo)
                 if err:
                     send_message(chat_id, err)
                     show_main_menu(chat_id)
