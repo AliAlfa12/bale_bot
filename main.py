@@ -295,7 +295,7 @@ def process_message(chat_id, text):
             result = download_website(url, chat_id)
             if isinstance(result, bytes):
                 # ✅ NEW: استفاده از URL به عنوان اسم فایل
-                website_name = urlparse(url).netloc.replace('www.', '').split('.')[0]
+                website_name = sanitize_website_name(url)
                 filename = f"{website_name}.zip"
                 send_bytes_as_document(chat_id, result, filename, f"🌐 وب‌سایت دانلود شده: {url}")
             else:
