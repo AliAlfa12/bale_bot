@@ -2,8 +2,16 @@ import os
 import time
 import requests
 from urllib.parse import urlparse
-from utils import send_message, edit_message_text, send_document, send_bytes_as_document, create_inline_keyboard, remove_reply_keyboard, logger, download_file_with_headers, create_rar_parts
-from features.menu import show_main_menu, show_help, ask_for_repo_name, ask_for_command, ask_for_ai_question, ask_for_download_link, ask_for_website_url, ask_for_extract_links_url, ask_for_youtube_url
+from utils import (
+    send_message, edit_message_text, send_document, send_bytes_as_document,
+    create_inline_keyboard, remove_reply_keyboard, logger, 
+    download_file_with_headers, create_rar_parts, clean_files_safe
+)
+from features.menu import (
+    show_main_menu, show_help, ask_for_repo_name, ask_for_command, 
+    ask_for_ai_question, ask_for_download_link, ask_for_website_url, 
+    ask_for_extract_links_url, ask_for_youtube_url
+)
 from features.github import search_github, get_user_repos, download_repo, get_releases, get_release_assets, download_release_asset
 from features.shell import run_command
 from features.ai import ask_gemini
@@ -26,6 +34,36 @@ def get_updates(offset):
     except Exception as e:
         logger.error(f"getUpdates error: {e}")
     return []
+
+def handle_rar_download(chat_id, file_path, description, cleanup=True):
+    """
+    ✅ NEW: یک تابع یکپارچه برای دانلود و فشرده‌سازی RAR
+    حذف تکرار کد در ۴ مکان
+    """
+    base_name = os.path.splitext(os.path.basename(file_path))[0]
+    parts = create_rar_parts(file_path, base_name, 19)
+    
+    if cleanup:
+        try:
+            os.remove(file_path)
+        except FileNotFoundError:
+            logger.warning(f"File not found for cleanup: {file_path}")
+        except Exception as e:
+            logger.error(f"Cleanup error for {file_path}: {e}")
+    
+    if parts:
+        if len(parts) == 1:
+            send_document(chat_id, parts[0], f"✅ {description}")
+        else:
+            send_message(chat_id, f"📦 فایل به {len(parts)} پارت RAR تقسیم شد")
+            for part_file in parts:
+                send_document(chat_id, part_file, f"📎 {part_file}")
+            # Clean up parts after sending
+            clean_files_safe(parts)
+    else:
+        send_message(chat_id, "❌ خطا در فشرده‌سازی")
+    
+    return bool(parts)
 
 def process_callback(chat_id, message_id, data):
     logger.info(f"Callback: {data} from {chat_id}, message_id={message_id}")
@@ -81,7 +119,7 @@ def process_callback(chat_id, message_id, data):
         edit_message_text(chat_id, message_id, f"📦 **{repo}**\nچه کاری انجام دهم؟", reply_markup)
     
     elif data.startswith("github_user_"):
-        username = data[12:]  # len("github_user_") = 12
+        username = data[12:]
         edit_message_text(chat_id, message_id, f"🔍 در حال دریافت ریپوهای کاربر {username}...", None)
         keyboard, error = get_user_repos(username)
         if error:
@@ -103,9 +141,7 @@ def process_callback(chat_id, message_id, data):
                 send_message(chat_id, f"📦 ریپو به {len(parts)} پارت RAR تقسیم شد")
                 for part_file in parts:
                     send_document(chat_id, part_file, f"📎 {part_file}")
-                for part_file in parts:
-                    try: os.remove(part_file)
-                    except: pass
+                clean_files_safe(parts)
         else:
             send_message(chat_id, result)
         show_main_menu(chat_id)
@@ -149,9 +185,7 @@ def process_callback(chat_id, message_id, data):
                     send_message(chat_id, f"📦 فایل به {len(plist)} پارت RAR تقسیم شد")
                     for pfile in plist:
                         send_document(chat_id, pfile, f"📎 {pfile}")
-                    for pfile in plist:
-                        try: os.remove(pfile)
-                        except: pass
+                    clean_files_safe(plist)
             else:
                 send_message(chat_id, result)
             show_main_menu(chat_id)
@@ -162,45 +196,18 @@ def process_callback(chat_id, message_id, data):
         edit_message_text(chat_id, message_id, "🎬 شروع دانلود ویدیو...", None)
         file_path, result = download_youtube_video(url, chat_id, send_message)
         if file_path:
-            base_name = os.path.splitext(os.path.basename(file_path))[0]
-            parts = create_rar_parts(file_path, base_name, 19)
-            os.remove(file_path)
-            if parts:
-                if len(parts) == 1:
-                    send_document(chat_id, parts[0], "🎬 ویدیو دانلود شد")
-                else:
-                    send_message(chat_id, f"📦 ویدیو به {len(parts)} پارت RAR تقسیم شد")
-                    for p in parts:
-                        send_document(chat_id, p, f"📎 {p}")
-                    for p in parts:
-                        try: os.remove(p)
-                        except: pass
-            else:
-                send_message(chat_id, "❌ خطا در فشرده‌سازی")
+            handle_rar_download(chat_id, file_path, "🎬 ویدیو دانلود شد")
         else:
             send_message(chat_id, result)
         show_main_menu(chat_id)
     
     elif data.startswith("youtube_audio_"):
-        url = data[13:]
+        # ✅ FIX: offset غلط بود (13)، حالا صحیح است (15)
+        url = data[15:]
         edit_message_text(chat_id, message_id, "🎵 شروع دانلود صدا...", None)
         file_path, result = download_youtube_audio(url, chat_id, send_message)
         if file_path:
-            base_name = os.path.splitext(os.path.basename(file_path))[0]
-            parts = create_rar_parts(file_path, base_name, 19)
-            os.remove(file_path)
-            if parts:
-                if len(parts) == 1:
-                    send_document(chat_id, parts[0], "🎵 فایل صوتی دانلود شد")
-                else:
-                    send_message(chat_id, f"📦 فایل صوتی به {len(parts)} پارت RAR تقسیم شد")
-                    for p in parts:
-                        send_document(chat_id, p, f"📎 {p}")
-                    for p in parts:
-                        try: os.remove(p)
-                        except: pass
-            else:
-                send_message(chat_id, "❌ خطا در فشرده‌سازی")
+            handle_rar_download(chat_id, file_path, "🎵 فایل صوتی دانلود شد")
         else:
             send_message(chat_id, result)
         show_main_menu(chat_id)
@@ -234,9 +241,7 @@ def process_message(chat_id, text):
                         send_message(chat_id, f"📦 ریپو به {len(parts)} پارت RAR تقسیم شد")
                         for p in parts:
                             send_document(chat_id, p, f"📎 {p}")
-                        for p in parts:
-                            try: os.remove(p)
-                            except: pass
+                        clean_files_safe(parts)
                 else:
                     send_message(chat_id, result)
                 show_main_menu(chat_id)
@@ -276,21 +281,7 @@ def process_message(chat_id, text):
                     temp_file = fname
                     with open(temp_file, 'wb') as f:
                         f.write(content)
-                    base_name = os.path.splitext(fname)[0]
-                    parts = create_rar_parts(temp_file, base_name, 19)
-                    os.remove(temp_file)
-                    if parts:
-                        if len(parts) == 1:
-                            send_document(chat_id, parts[0], f"📁 {size_mb:.1f}MB - {fname}")
-                        else:
-                            send_message(chat_id, f"📦 فایل به {len(parts)} پارت RAR تقسیم شد")
-                            for p in parts:
-                                send_document(chat_id, p, f"📎 {p}")
-                            for p in parts:
-                                try: os.remove(p)
-                                except: pass
-                    else:
-                        send_message(chat_id, "❌ خطا در فشرده‌سازی")
+                    handle_rar_download(chat_id, temp_file, f"📁 {size_mb:.1f}MB - {fname}")
                 else:
                     send_message(chat_id, "❌ خطا در دانلود فایل")
             except Exception as e:
@@ -303,7 +294,10 @@ def process_message(chat_id, text):
             del user_states[chat_id]
             result = download_website(url, chat_id)
             if isinstance(result, bytes):
-                send_bytes_as_document(chat_id, result, "website.zip", "🌐 وب‌سایت دانلود شده")
+                # ✅ NEW: استفاده از URL به عنوان اسم فایل
+                website_name = urlparse(url).netloc.replace('www.', '').split('.')[0]
+                filename = f"{website_name}.zip"
+                send_bytes_as_document(chat_id, result, filename, f"🌐 وب‌سایت دانلود شده: {url}")
             else:
                 send_message(chat_id, result)
             show_main_menu(chat_id)
@@ -317,7 +311,12 @@ def process_message(chat_id, text):
                 send_message(chat_id, error)
             else:
                 send_document(chat_id, file_path, "🔗 لینک‌های استخراج شده")
-                os.remove(file_path)
+                try:
+                    os.remove(file_path)
+                except FileNotFoundError:
+                    pass
+                except Exception as e:
+                    logger.error(f"Error removing extracted links file: {e}")
             show_main_menu(chat_id)
         
         elif action == "waiting_for_youtube":
@@ -348,7 +347,7 @@ def main():
         with open(offset_file, "r") as f:
             try:
                 offset = int(f.read().strip())
-            except:
+            except ValueError:
                 offset = 0
     
     start_time = time.time()
@@ -373,8 +372,8 @@ def main():
                     data = cb["data"]
                     try:
                         requests.post(f"https://tapi.bale.ai/bot{os.environ['BALE_TOKEN']}/answerCallbackQuery", json={"callback_query_id": cb["id"]})
-                    except:
-                        pass
+                    except Exception as e:
+                        logger.warning(f"answerCallbackQuery error: {e}")
                     process_callback(chat_id, message_id, data)
                 elif "message" in upd:
                     msg = upd["message"]
