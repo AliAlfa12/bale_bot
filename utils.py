@@ -185,3 +185,22 @@ def download_file_with_headers(url, timeout=50, retries=2):
         except Exception as e:
             logger.error(f"Download error: {e}")
     return None
+
+# ========== ✅ NEW: تابع ایمن برای حذف فایل‌های متعدد ==========
+def clean_files_safe(file_list):
+    """
+    حذف ایمن چند فایل
+    - اگر فایل وجود نداشته باشد، skip می‌کند
+    - تمام خطاها را log می‌کند
+    """
+    for file_path in file_list:
+        try:
+            if os.path.exists(file_path):
+                os.remove(file_path)
+                logger.info(f"Cleaned up: {file_path}")
+        except FileNotFoundError:
+            logger.debug(f"File already deleted: {file_path}")
+        except PermissionError:
+            logger.error(f"Permission denied for {file_path}")
+        except Exception as e:
+            logger.error(f"Error cleaning {file_path}: {e}")
