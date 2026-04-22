@@ -10,20 +10,21 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.10'
       
       - name: Setup yt-dlp
-        uses: AnimMouse/setup-yt-dlp@v3  # <--- این مرحله اضافه شده
+        uses: AnimMouse/setup-yt-dlp@v3
         with:
-          ffmpeg: true    # نصب ffmpeg برای پردازش فایل‌های صوتی و تصویری
-          aria2: true     # استفاده از aria2 برای دانلود سریع‌تر
-          ejs-node: true  # نصب ابزار حل چالش‌های جاوااسکریپتی یوتیوب
+          ffmpeg: true
+          aria2: true
+          version: nightly
       
       - name: Install rar and unrar
-        run: sudo apt-get install -y rar unrar
+        run: sudo apt-get update && sudo apt-get install -y rar unrar
       
       - name: Cache offset
         uses: actions/cache@v3
@@ -31,8 +32,10 @@ jobs:
           path: offset.txt
           key: bale-offset-cache
       
-      - name: Install Python dependencies
-        run: pip install -r requirements.txt
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
       
       - name: Run bot
         env:
@@ -41,4 +44,5 @@ jobs:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           ARCHIVE_PASSWORD: ${{ secrets.ARCHIVE_PASSWORD }}
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
+          YOUTUBE_COOKIES: ${{ secrets.YOUTUBE_COOKIES }}
         run: python main.py
