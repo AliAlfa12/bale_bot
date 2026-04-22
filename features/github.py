@@ -22,28 +22,92 @@ def _log_response(resp, context):
         except:
             pass
 
-def search_repo(query):
-    try:
-        r = requests.get(f"https://api.github.com/search/repositories?q={query}&per_page=5", headers=_headers(), timeout=10)
-        _log_response(r, "search_repo")
-        if r.status_code != 200:
-            return None, "❌ خطا در ارتباط با گیت‌هاب"
-        items = r.json().get("items", [])
-        if not items:
-            return None, "❌ هیچ ریپویی یافت نشد."
+def search_github(query):
+    """
+    جستجوی کلی در گیت‌هاب:
+    - اگر query شامل '/' باشد → ریپوی دقیق
+    - در غیر این صورت: جستجو در ریپوها و کاربران
+    باز می‌گرداند: (keyboard, error_message)
+    """
+    if '/' in query:
+        # جستجوی دقیق ریپو
+        try:
+            url = f"https://api.github.com/repos/{query}"
+            r = requests.get(url, headers=_headers(), timeout=10)
+            _log_response(r, "search_exact_repo")
+            if r.status_code != 200:
+                return None, "❌ ریپو مورد نظر یافت نشد."
+            repo = r.json()
+            full_name = repo["full_name"]
+            stars = repo["stargazers_count"]
+            # ساخت یک دکمه برای همین ریپو
+            buttons = [{"text": f"⭐ {stars} - {full_name}", "callback_data": f"github_repo_{full_name}"}]
+            buttons.append({"text": "🔙 برگشت", "callback_data": "back_to_menu"})
+            return create_inline_keyboard(buttons, columns=1), None
+        except Exception as e:
+            logger.error(f"exact repo search error: {e}")
+            return None, "❌ خطا در جستجوی ریپو"
+    else:
+        # جستجوی عمومی در ریپوها و کاربران
+        repos = []
+        users = []
+        try:
+            # جستجوی ریپوها (بر اساس نام)
+            repo_url = f"https://api.github.com/search/repositories?q={query}+in:name&per_page=5"
+            r_repo = requests.get(repo_url, headers=_headers(), timeout=10)
+            _log_response(r_repo, "search_repos_general")
+            if r_repo.status_code == 200:
+                repos = r_repo.json().get("items", [])
+        except Exception as e:
+            logger.error(f"repo search error: {e}")
+        
+        try:
+            # جستجوی کاربران (بر اساس نام کاربری)
+            user_url = f"https://api.github.com/search/users?q={query}+in:login&per_page=5"
+            r_user = requests.get(user_url, headers=_headers(), timeout=10)
+            _log_response(r_user, "search_users_general")
+            if r_user.status_code == 200:
+                users = r_user.json().get("items", [])
+        except Exception as e:
+            logger.error(f"user search error: {e}")
+        
+        if not repos and not users:
+            return None, "❌ هیچ نتیجه‌ای برای جستجوی شما یافت نشد."
+        
         buttons = []
-        for item in items:
-            name = item["full_name"]
-            stars = item["stargazers_count"]
-            text = f"⭐ {stars} - {name}"
-            callback_data = f"github_repo_{name}"
-            buttons.append({"text": text, "callback_data": callback_data})
+        for repo in repos[:5]:
+            full_name = repo["full_name"]
+            stars = repo["stargazers_count"]
+            buttons.append({"text": f"📁 {full_name} ⭐ {stars}", "callback_data": f"github_repo_{full_name}"})
+        for user in users[:5]:
+            login = user["login"]
+            buttons.append({"text": f"👤 {login}", "callback_data": f"github_user_{login}"})
         buttons.append({"text": "🔙 برگشت", "callback_data": "back_to_menu"})
         return create_inline_keyboard(buttons, columns=1), None
-    except Exception as e:
-        logger.error(f"search_repo error: {e}")
-        return None, f"❌ خطا: {str(e)[:100]}"
 
+def get_user_repos(username):
+    """دریافت لیست ریپوهای یک کاربر (حداکثر ۱۰ عدد)"""
+    try:
+        url = f"https://api.github.com/users/{username}/repos?sort=updated&per_page=10"
+        r = requests.get(url, headers=_headers(), timeout=10)
+        _log_response(r, f"user_repos_{username}")
+        if r.status_code != 200:
+            return None, "❌ خطا در دریافت ریپوهای کاربر"
+        repos = r.json()
+        if not repos:
+            return None, "⚠️ این کاربر هیچ ریپوی عمومی ندارد."
+        buttons = []
+        for repo in repos:
+            full_name = repo["full_name"]
+            stars = repo["stargazers_count"]
+            buttons.append({"text": f"📁 {full_name} ⭐ {stars}", "callback_data": f"github_repo_{full_name}"})
+        buttons.append({"text": "🔙 برگشت به جستجو", "callback_data": "back_to_menu"})
+        return create_inline_keyboard(buttons, columns=1), None
+    except Exception as e:
+        logger.error(f"get_user_repos error: {e}")
+        return None, "❌ خطا در دریافت اطلاعات کاربر"
+
+# توابع قبلی (download_repo, get_releases, get_release_assets, download_release_asset) بدون تغییر
 def download_repo(repo_name):
     try:
         url = f"https://api.github.com/repos/{repo_name}/zipball"
@@ -115,7 +179,6 @@ def get_release_assets(repo_name, tag_name):
         for asset in assets:
             name = asset["name"]
             size_mb = asset["size"] / (1024*1024)
-            # حذف کلمه "دانلود" و تعداد دانلود
             text = f"📎 {name} - {size_mb:.1f}MB"
             callback_data = f"github_download_asset_{repo_name}|{tag_name}|{name}"
             buttons.append({"text": text, "callback_data": callback_data})
