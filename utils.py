@@ -7,6 +7,7 @@ import random
 import logging
 import subprocess
 import shlex
+import base64
 from urllib.parse import urlparse
 
 # ========== تنظیمات لاگ ==========
@@ -22,6 +23,9 @@ BASE_URL = f"https://tapi.bale.ai/bot{BALE_TOKEN}/"
 GROUP_CHAT_ID = os.environ.get("CHAT_ID_GROUP")
 ARCHIVE_PASSWORD = os.environ.get("ARCHIVE_PASSWORD")
 
+# ✅ YouTube Cookies (Base64)
+YOUTUBE_COOKIES_BASE64 = os.environ.get("YOUTUBE_COOKIES_BASE64")
+
 # ========== هدرهای پیشرفته ==========
 DEFAULT_HEADERS = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -32,6 +36,46 @@ DEFAULT_HEADERS = {
     'Connection': 'keep-alive',
     'Upgrade-Insecure-Requests': '1',
 }
+
+# ========== Setup YouTube Cookies ==========
+def setup_youtube_cookies():
+    """
+    ✅ Setup YouTube cookies from Base64 environment variable
+    """
+    cookies_file = "cookies.txt"
+    
+    # اگر فایل قبلا موجود است
+    if os.path.exists(cookies_file):
+        logger.info(f"✅ Cookies file already exists: {cookies_file}")
+        return True
+    
+    # اگر Base64 موجود است
+    if YOUTUBE_COOKIES_BASE64:
+        try:
+            logger.info("🔐 Decoding YouTube cookies from environment variable...")
+            
+            # Decode Base64
+            decoded = base64.b64decode(YOUTUBE_COOKIES_BASE64)
+            
+            # Write to file
+            with open(cookies_file, 'wb') as f:
+                f.write(decoded)
+            
+            logger.info(f"✅ YouTube cookies setup successfully: {cookies_file}")
+            return True
+        except Exception as e:
+            logger.error(f"❌ Error decoding YouTube cookies: {e}")
+            return False
+    else:
+        logger.warning("⚠️ YOUTUBE_COOKIES_BASE64 not found")
+        logger.info("ℹ️ Bot will use OAuth2 (without cookies)")
+        return False
+
+# Run at startup
+try:
+    setup_youtube_cookies()
+except Exception as e:
+    logger.error(f"Error during YouTube cookies setup: {e}")
 
 # ========== توابع اصلی ==========
 def send_message(chat_id, text, reply_markup=None):
@@ -186,13 +230,8 @@ def download_file_with_headers(url, timeout=50, retries=2):
             logger.error(f"Download error: {e}")
     return None
 
-# ========== ✅ NEW: تابع ایمن برای حذف فایل‌های متعدد ==========
 def clean_files_safe(file_list):
-    """
-    حذف ایمن چند فایل
-    - اگر فایل وجود نداشته باشد، skip می‌کند
-    - تمام خطاها را log می‌کند
-    """
+    """حذف ایمن چند فایل"""
     for file_path in file_list:
         try:
             if os.path.exists(file_path):
@@ -205,52 +244,28 @@ def clean_files_safe(file_list):
         except Exception as e:
             logger.error(f"Error cleaning {file_path}: {e}")
 
-# ========== ✅ NEW: تابع صحیح کردن نام وبسایت برای استفاده در اسم فایل ==========
 def sanitize_website_name(url):
-    """
-    تبدیل URL به یک نام فایل معتبر
-    - حذف کاراکترهای غیرمعتبر
-    - تبدیل کاراکترهای خاص به معادل معمولی
-    - محدود کردن طول
-    """
-    # پاک کردن http:// و https://
+    """تبدیل URL به نام فایل معتبر"""
     clean_url = url.replace('https://', '').replace('http://', '')
-    # حذف www.
     clean_url = clean_url.replace('www.', '')
-    # حذف / و query strings
     clean_url = clean_url.split('/')[0].split('?')[0]
     
-    # تعویض کاراکترهای مورد نیاز
     replacements = {
-        '.': '_',      # نقطه به زیرخط
-        ':': '_',      # دو نقطه به زیرخط
-        ' ': '_',      # فضا به زیرخط
-        '"': '',       # حذف علامت گذاری
-        "'": '',       # حذف تک نقل
-        '?': '',       # حذف سوالی
-        '*': '',       # حذف ستاره
-        '<': '_',      # زاویه چپ
-        '>': '_',      # زاویه راست
-        '|': '_',      # پایپ
-        '\\': '_',     # بک اسلش
-        '/': '_',      # فرورد اسلش
+        '.': '_', ':': '_', ' ': '_', '"': '', "'": '', '?': '', '*': '',
+        '<': '_', '>': '_', '|': '_', '\\': '_', '/': '_',
     }
     
     for old_char, new_char in replacements.items():
         clean_url = clean_url.replace(old_char, new_char)
     
-    # حذف کاراکترهای پی‌درپی مشابه
     while '__' in clean_url:
         clean_url = clean_url.replace('__', '_')
     
-    # حذف زیرخط از ابتدا و انتها
     clean_url = clean_url.strip('_')
     
-    # محدود کردن طول به ۵۰ کاراکتر
     if len(clean_url) > 50:
         clean_url = clean_url[:50].rstrip('_')
     
-    # اگر خالی باشد، نام پیشفرض
     if not clean_url:
         clean_url = 'website'
     
