@@ -41,41 +41,78 @@ DEFAULT_HEADERS = {
 def setup_youtube_cookies():
     """
     ✅ Setup YouTube cookies from Base64 environment variable
+    بهبود شده: اکنون Base64 را decode می‌کند و ذخیره می‌کند
     """
     cookies_file = "cookies.txt"
     
-    # اگر فایل قبلا موجود است
-    if os.path.exists(cookies_file):
-        logger.info(f"✅ Cookies file already exists: {cookies_file}")
-        return True
+    logger.info("=" * 50)
+    logger.info("🔐 YouTube Cookies Setup Started")
+    logger.info("=" * 50)
     
-    # اگر Base64 موجود است
-    if YOUTUBE_COOKIES_BASE64:
-        try:
-            logger.info("🔐 Decoding YouTube cookies from environment variable...")
-            
-            # Decode Base64
-            decoded = base64.b64decode(YOUTUBE_COOKIES_BASE64)
-            
-            # Write to file
-            with open(cookies_file, 'wb') as f:
-                f.write(decoded)
-            
-            logger.info(f"✅ YouTube cookies setup successfully: {cookies_file}")
-            return True
-        except Exception as e:
-            logger.error(f"❌ Error decoding YouTube cookies: {e}")
-            return False
-    else:
-        logger.warning("⚠️ YOUTUBE_COOKIES_BASE64 not found")
+    # Step 1: بررسی اگر Base64 موجود است
+    if not YOUTUBE_COOKIES_BASE64:
+        logger.warning("⚠️ YOUTUBE_COOKIES_BASE64 environment variable not found")
         logger.info("ℹ️ Bot will use OAuth2 (without cookies)")
+        logger.info("=" * 50)
+        return False
+    
+    logger.info(f"✅ YOUTUBE_COOKIES_BASE64 found ({len(YOUTUBE_COOKIES_BASE64)} chars)")
+    
+    # Step 2: Decode Base64
+    try:
+        logger.info("🔄 Decoding Base64...")
+        
+        # اگر Padding لازم است، اضافه کنید
+        padding = 4 - (len(YOUTUBE_COOKIES_BASE64) % 4)
+        if padding and padding != 4:
+            padded_base64 = YOUTUBE_COOKIES_BASE64 + ('=' * padding)
+            logger.debug(f"Added {padding} padding characters")
+        else:
+            padded_base64 = YOUTUBE_COOKIES_BASE64
+        
+        decoded = base64.b64decode(padded_base64)
+        logger.info(f"✅ Base64 decoded successfully ({len(decoded)} bytes)")
+        
+        # Step 3: ذخیره در فایل
+        logger.info(f"💾 Writing to {cookies_file}...")
+        with open(cookies_file, 'wb') as f:
+            f.write(decoded)
+        
+        # Step 4: بررسی فایل
+        if os.path.exists(cookies_file):
+            file_size = os.path.getsize(cookies_file)
+            logger.info(f"✅ File created successfully: {cookies_file} ({file_size} bytes)")
+            
+            # نمونه از محتوا
+            with open(cookies_file, 'rb') as f:
+                content_sample = f.read(100)
+                logger.debug(f"File header: {content_sample[:50]}")
+            
+            logger.info("=" * 50)
+            logger.info("✅ YouTube Cookies Setup Complete")
+            logger.info("=" * 50)
+            return True
+        else:
+            logger.error(f"❌ File was not created: {cookies_file}")
+            logger.info("=" * 50)
+            return False
+    
+    except base64.binascii.Error as e:
+        logger.error(f"❌ Base64 decoding error: {e}")
+        logger.error(f"Hint: Make sure YOUTUBE_COOKIES_BASE64 is valid Base64")
+        logger.info("=" * 50)
+        return False
+    except Exception as e:
+        logger.error(f"❌ Unexpected error: {e}", exc_info=True)
+        logger.info("=" * 50)
         return False
 
-# Run at startup
+# ✅ Run at startup - اجرا شود زمانی که ماژول لود می‌شود
 try:
-    setup_youtube_cookies()
+    setup_result = setup_youtube_cookies()
+    logger.info(f"Setup result: {'Success' if setup_result else 'Failed (will use OAuth2)'}")
 except Exception as e:
-    logger.error(f"Error during YouTube cookies setup: {e}")
+    logger.error(f"❌ Fatal error during YouTube cookies setup: {e}", exc_info=True)
 
 # ========== توابع اصلی ==========
 def send_message(chat_id, text, reply_markup=None):
