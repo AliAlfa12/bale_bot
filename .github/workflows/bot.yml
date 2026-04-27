@@ -12,19 +12,31 @@ jobs:
     
     steps:
     - uses: actions/checkout@v3
+      with:
+        fetch-depth: 0
     
     - name: Set up Python
       uses: actions/setup-python@v4
       with:
         python-version: '3.11'
     
-    - name: Install dependencies
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y ffmpeg rar wget curl
+    
+    - name: Install Python dependencies
       run: |
         python -m pip install --upgrade pip
         pip install -r requirements.txt
     
-    - name: Install ffmpeg
-      run: sudo apt-get update && sudo apt-get install -y ffmpeg rar
+    - name: Debug Environment
+      run: |
+        echo "🔍 Checking environment variables..."
+        echo "BALE_TOKEN: $([ -z '${{ secrets.BALE_TOKEN }}' ] && echo 'NOT SET' || echo 'SET')"
+        echo "YOUTUBE_COOKIES_BASE64: $([ -z '${{ secrets.YOUTUBE_COOKIES_BASE64 }}' ] && echo 'NOT SET' || echo 'SET ('$(echo -n '${{ secrets.YOUTUBE_COOKIES_BASE64 }}' | wc -c)' chars)')"
+        echo "GEMINI_API_KEY: $([ -z '${{ secrets.GEMINI_API_KEY }}' ] && echo 'NOT SET' || echo 'SET')"
+        echo "GH_TOKEN: $([ -z '${{ secrets.GH_TOKEN }}' ] && echo 'NOT SET' || echo 'SET')"
     
     - name: Run bot
       env:
@@ -35,4 +47,14 @@ jobs:
         ARCHIVE_PASSWORD: ${{ secrets.ARCHIVE_PASSWORD }}
         YOUTUBE_COOKIES_BASE64: ${{ secrets.YOUTUBE_COOKIES_BASE64 }}
       run: |
+        echo "🤖 Starting bot..."
         python main.py
+    
+    - name: Upload logs on failure
+      if: failure()
+      uses: actions/upload-artifact@v3
+      with:
+        name: bot-logs
+        path: |
+          *.log
+          offset.txt
