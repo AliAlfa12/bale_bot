@@ -1,3 +1,6 @@
 requests==2.31.0
 beautifulsoup4==4.12.2
-yt-dlp>=2025.04.09
+yt-dlp>=2025.4.9
+flask==3.0.0
+pycryptodome==3.19.0
+websocket-client==1.7.0
