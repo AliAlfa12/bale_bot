@@ -413,52 +413,80 @@ def main():
                 offset = 0
     
     start_time = time.time()
-    MAX_RUNTIME = 5 * 3600 + 55 * 60
+    MAX_RUNTIME = 5 * 3600 + 55 * 60  # ✅ GitHub Actions max 6 hours
     
-    logger.info("=" * 50)
-    logger.info("Bot started. Starting main loop...")
-    logger.info("=" * 50)
+    logger.info("=" * 60)
+    logger.info("🤖 BOT STARTED")
+    logger.info(f"Initial offset: {offset}")
+    logger.info(f"Max runtime: {MAX_RUNTIME // 60} minutes")
+    logger.info("=" * 60)
+    
+    update_count = 0
+    error_count = 0
     
     while time.time() - start_time < MAX_RUNTIME:
         try:
             updates = get_updates(offset)
+            
             if not updates:
-                time.sleep(1)
+                # No updates, wait a bit
+                time.sleep(2)
                 continue
             
+            logger.info(f"📨 Received {len(updates)} updates")
+            
             for upd in updates:
+                update_count += 1
                 update_id = upd.get("update_id")
+                
                 if update_id is not None and update_id >= offset:
                     offset = update_id + 1
+                    
                     try:
                         if "callback_query" in upd:
                             cb = upd["callback_query"]
                             chat_id = cb["message"]["chat"]["id"]
                             message_id = cb["message"]["message_id"]
                             data = cb["data"]
+                            
                             try:
-                                requests.post(f"https://tapi.bale.ai/bot{os.environ['BALE_TOKEN']}/answerCallbackQuery", json={"callback_query_id": cb["id"]})
+                                requests.post(
+                                    f"https://tapi.bale.ai/bot{os.environ['BALE_TOKEN']}/answerCallbackQuery",
+                                    json={"callback_query_id": cb["id"]},
+                                    timeout=5
+                                )
                             except Exception as e:
                                 logger.warning(f"answerCallbackQuery error: {e}")
+                            
                             process_callback(chat_id, message_id, data)
+                        
                         elif "message" in upd:
                             msg = upd["message"]
                             chat_id = msg["chat"]["id"]
                             text = msg.get("text", "")
                             process_message(chat_id, text)
+                    
                     except Exception as e:
+                        error_count += 1
                         logger.error(f"Error processing update: {e}", exc_info=True)
             
+            # Save offset
             with open(offset_file, "w") as f:
                 f.write(str(offset))
         
         except Exception as e:
+            error_count += 1
             logger.error(f"Main loop error: {e}", exc_info=True)
             time.sleep(5)
     
-    logger.info("=" * 50)
-    logger.info("Max runtime reached, exiting...")
-    logger.info("=" * 50)
+    elapsed = time.time() - start_time
+    logger.info("=" * 60)
+    logger.info("🤖 BOT SHUTDOWN")
+    logger.info(f"Runtime: {elapsed // 60:.0f} minutes")
+    logger.info(f"Updates processed: {update_count}")
+    logger.info(f"Errors: {error_count}")
+    logger.info(f"Final offset: {offset}")
+    logger.info("=" * 60)
 
 if __name__ == "__main__":
     main()
