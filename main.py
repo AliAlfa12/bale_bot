@@ -24,24 +24,50 @@ from features.youtube_downloader import download_youtube_video, download_youtube
 user_states = {}
 
 def get_updates(offset):
+    """✅ بهبور شده: بهتر error handling"""
     url = f"https://tapi.bale.ai/bot{os.environ['BALE_TOKEN']}/getUpdates"
     params = {"offset": offset, "timeout": 30, "allowed_updates": ["message", "callback_query"]}
+    
     try:
         resp = requests.get(url, params=params, timeout=35)
+        
         if resp.status_code == 200:
             data = resp.json()
             if data.get("ok"):
                 return data.get("result", [])
+            else:
+                logger.warning(f"API returned not ok: {data.get('description', 'Unknown error')}")
+        
+        elif resp.status_code == 502:
+            logger.warning("⚠️ Server 502 Bad Gateway - will retry")
+            time.sleep(2)  # ✅ صبر کنید
+            return []
+        
+        elif resp.status_code == 503:
+            logger.warning("⚠️ Server 503 Service Unavailable - will retry")
+            time.sleep(5)
+            return []
+        
+        elif resp.status_code == 429:
+            logger.warning("⚠️ Rate limited - waiting 60 seconds")
+            time.sleep(60)
+            return []
+        
         else:
-            logger.error(f"getUpdates failed with status {resp.status_code}: {resp.text[:200]}")
+            logger.error(f"❌ getUpdates failed with status {resp.status_code}")
+            logger.debug(f"Response: {resp.text[:200]}")
+    
+    except requests.Timeout:
+        logger.warning("⚠️ Request timeout - will retry")
+    except requests.ConnectionError:
+        logger.warning("⚠️ Connection error - will retry")
     except Exception as e:
-        logger.error(f"getUpdates error: {e}", exc_info=True)
+        logger.error(f"❌ getUpdates error: {e}")
+    
     return []
 
 def handle_rar_download(chat_id, file_path, description, cleanup=True):
-    """
-    ✅ تابع یکپارچه برای دانلود و فشرده‌سازی RAR
-    """
+    """تابع یکپارچه برای دانلود و فشرده‌سازی RAR"""
     try:
         logger.info(f"Starting RAR compression for: {file_path}")
         base_name = os.path.splitext(os.path.basename(file_path))[0]
@@ -76,7 +102,8 @@ def handle_rar_download(chat_id, file_path, description, cleanup=True):
         return False
 
 def process_callback(chat_id, message_id, data):
-    logger.info(f"Callback received - Chat: {chat_id}, Data: {data}")
+    """✅ بهبور شده: بهتر error handling"""
+    logger.info(f"Callback received - Chat: {chat_id}, Data: {data[:50]}")
     
     try:
         # ========== منوی اصلی ==========
@@ -118,7 +145,7 @@ def process_callback(chat_id, message_id, data):
                 del user_states[chat_id]
             show_main_menu(chat_id)
         
-        # ========== جستجوی گیت‌هاب (ریپو یا کاربر) ==========
+        # ========== GitHub ==========
         elif data.startswith("github_repo_"):
             repo = data[12:]
             btns = [
@@ -139,7 +166,6 @@ def process_callback(chat_id, message_id, data):
             else:
                 edit_message_text(chat_id, message_id, f"📁 ریپوهای {username}:", keyboard)
         
-        # ========== دانلود مستقیم ریپو ==========
         elif data.startswith("download_repo_"):
             repo = data[14:]
             logger.info(f"Downloading repo: {repo}")
@@ -160,7 +186,6 @@ def process_callback(chat_id, message_id, data):
                 send_message(chat_id, result)
             show_main_menu(chat_id)
         
-        # ========== ریلیزها ==========
         elif data.startswith("releases_repo_"):
             repo = data[14:]
             logger.info(f"Fetching releases for: {repo}")
@@ -211,7 +236,7 @@ def process_callback(chat_id, message_id, data):
                     send_message(chat_id, result)
                 show_main_menu(chat_id)
         
-        # ========== یوتیوب ==========
+        # ========== YouTube ==========
         elif data.startswith("youtube_video_"):
             url = data[14:]
             logger.info(f"Downloading YouTube video: {url}")
@@ -244,6 +269,7 @@ def process_callback(chat_id, message_id, data):
         show_main_menu(chat_id)
 
 def process_message(chat_id, text):
+    """✅ بهبور شده: بهتر error handling"""
     try:
         if chat_id in user_states:
             state = user_states[chat_id]
@@ -403,6 +429,7 @@ def process_message(chat_id, text):
         show_main_menu(chat_id)
 
 def main():
+    """✅ بهبور شده: بهتر error handling و logging"""
     offset_file = "offset.txt"
     offset = 0
     if os.path.exists(offset_file):
@@ -413,7 +440,7 @@ def main():
                 offset = 0
     
     start_time = time.time()
-    MAX_RUNTIME = 5 * 3600 + 55 * 60  # ✅ GitHub Actions max 6 hours
+    MAX_RUNTIME = 5 * 3600 + 55 * 60  # GitHub Actions max
     
     logger.info("=" * 60)
     logger.info("🤖 BOT STARTED")
@@ -423,6 +450,7 @@ def main():
     
     update_count = 0
     error_count = 0
+    server_error_count = 0
     
     while time.time() - start_time < MAX_RUNTIME:
         try:
@@ -476,7 +504,9 @@ def main():
         
         except Exception as e:
             error_count += 1
-            logger.error(f"Main loop error: {e}", exc_info=True)
+            if "502" in str(e) or "503" in str(e):
+                server_error_count += 1
+            logger.error(f"Main loop error: {e}")
             time.sleep(5)
     
     elapsed = time.time() - start_time
@@ -485,6 +515,7 @@ def main():
     logger.info(f"Runtime: {elapsed // 60:.0f} minutes")
     logger.info(f"Updates processed: {update_count}")
     logger.info(f"Errors: {error_count}")
+    logger.info(f"Server errors (502/503): {server_error_count}")
     logger.info(f"Final offset: {offset}")
     logger.info("=" * 60)
 
