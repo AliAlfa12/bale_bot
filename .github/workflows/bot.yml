@@ -5,11 +5,15 @@ on:
     # هر ۶ ساعت یک‌بار
     - cron: '0 */6 * * *'
   workflow_dispatch:
+  push:
+    branches: [ main ]
+    paths:
+      - '.github/workflows/bot.yml'
 
 jobs:
   run-bot:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 350  # ✅ کمتر از max 6 ساعت
     
     steps:
     - uses: actions/checkout@v4
@@ -25,72 +29,16 @@ jobs:
     - name: Install system dependencies
       run: |
         echo "📦 Installing system dependencies..."
-        sudo apt-get update
-        sudo apt-get install -y ffmpeg rar wget curl
-        echo "✅ System dependencies installed"
+        sudo apt-get update -qq
+        sudo apt-get install -y -qq ffmpeg rar wget curl
+        echo "✅ Done"
     
     - name: Install Python dependencies
       run: |
-        echo "📦 Installing Python dependencies..."
-        python -m pip install --upgrade pip
-        pip install -r requirements.txt
-        echo "✅ Python dependencies installed"
+        python -m pip install --upgrade -q pip
+        pip install -q -r requirements.txt
     
-    - name: Debug - Check Environment
-      run: |
-        echo "🔍 ========== Debug Information =========="
-        echo "Python version: $(python --version)"
-        echo "Current directory: $(pwd)"
-        echo "Directory contents: $(ls -la | head -20)"
-        echo ""
-        echo "Environment variables:"
-        echo "  BALE_TOKEN: $([ -z '${{ secrets.BALE_TOKEN }}' ] && echo '❌ NOT SET' || echo '✅ SET')"
-        echo "  YOUTUBE_COOKIES_BASE64: $([ -z '${{ secrets.YOUTUBE_COOKIES_BASE64 }}' ] && echo '❌ NOT SET' || echo '✅ SET ('$(echo -n '${{ secrets.YOUTUBE_COOKIES_BASE64 }}' | wc -c)' chars)')"
-        echo "  GEMINI_API_KEY: $([ -z '${{ secrets.GEMINI_API_KEY }}' ] && echo '❌ NOT SET' || echo '✅ SET')"
-        echo "  GH_TOKEN: $([ -z '${{ secrets.GH_TOKEN }}' ] && echo '❌ NOT SET' || echo '✅ SET')"
-        echo "  CHAT_ID_GROUP: $([ -z '${{ secrets.CHAT_ID_GROUP }}' ] && echo '❌ NOT SET' || echo '✅ SET')"
-        echo "  ARCHIVE_PASSWORD: $([ -z '${{ secrets.ARCHIVE_PASSWORD }}' ] && echo '❌ NOT SET' || echo '✅ SET')"
-        echo "=========================================="
-        
-        # Check if ffmpeg is installed
-        echo ""
-        echo "ffmpeg version: $(ffmpeg -version | head -1)"
-        echo "rar version: $(rar --version | head -1 || echo 'rar not found')"
-    
-    - name: Test YouTube Cookies Decoding
-      run: |
-        echo "🧪 Testing Base64 decoding..."
-        python3 << 'EOF'
-        import base64
-        import os
-        
-        cookies_b64 = os.environ.get('YOUTUBE_COOKIES_BASE64', '')
-        
-        if not cookies_b64:
-            print("❌ YOUTUBE_COOKIES_BASE64 not set")
-        else:
-            print(f"✅ YOUTUBE_COOKIES_BASE64 length: {len(cookies_b64)} chars")
-            
-            try:
-                # Add padding if needed
-                padding = 4 - (len(cookies_b64) % 4)
-                if padding and padding != 4:
-                    padded = cookies_b64 + ('=' * padding)
-                else:
-                    padded = cookies_b64
-                
-                decoded = base64.b64decode(padded)
-                print(f"✅ Successfully decoded: {len(decoded)} bytes")
-                
-                # Check first few lines
-                first_lines = decoded.decode('utf-8', errors='ignore').split('\n')[:3]
-                for i, line in enumerate(first_lines, 1):
-                    print(f"   Line {i}: {line[:80]}")
-            except Exception as e:
-                print(f"❌ Decode error: {e}")
-        EOF
-    
-    - name: Run Bot
+    - name: Run bot with timeout handling
       env:
         BALE_TOKEN: ${{ secrets.BALE_TOKEN }}
         GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
@@ -99,21 +47,25 @@ jobs:
         ARCHIVE_PASSWORD: ${{ secrets.ARCHIVE_PASSWORD }}
         YOUTUBE_COOKIES_BASE64: ${{ secrets.YOUTUBE_COOKIES_BASE64 }}
       run: |
-        echo "🤖 ========== Bot Starting =========="
-        python main.py
-        echo "🤖 ========== Bot Finished =========="
-    
-    - name: Save State for Next Run
-      if: always()
-      run: |
-        echo "💾 Saving state..."
-        if [ -f offset.txt ]; then
-          echo "✅ offset.txt exists ($(cat offset.txt))"
-        else
-          echo "⚠️ offset.txt not created"
+        echo "🤖 Starting bot..."
+        timeout 340m python main.py || EXIT_CODE=$?
+        
+        if [ $EXIT_CODE -eq 124 ]; then
+          echo "✅ Bot reached time limit (expected)"
+          exit 0
+        elif [ $EXIT_CODE -ne 0 ]; then
+          echo "❌ Bot exited with code: $EXIT_CODE"
+          exit $EXIT_CODE
         fi
     
-    - name: Upload Logs (on failure only)
+    - name: Save state
+      if: always()
+      run: |
+        echo "💾 Final state:"
+        [ -f offset.txt ] && echo "  Offset: $(cat offset.txt)" || echo "  Offset: Not created"
+        [ -f cookies.txt ] && echo "  Cookies: ✅" || echo "  Cookies: ❌"
+    
+    - name: Upload logs on failure
       if: failure()
       uses: actions/upload-artifact@v4
       with:
@@ -121,6 +73,5 @@ jobs:
         path: |
           *.log
           offset.txt
-          cookies.txt
-        retention-days: 7
+        retention-days: 3
         if-no-files-found: ignore
