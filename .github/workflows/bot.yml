@@ -46,6 +46,7 @@ jobs:
         CHAT_ID_GROUP: ${{ secrets.CHAT_ID_GROUP }}
         ARCHIVE_PASSWORD: ${{ secrets.ARCHIVE_PASSWORD }}
         YOUTUBE_COOKIES_BASE64: ${{ secrets.YOUTUBE_COOKIES_BASE64 }}
+        GOOGLE_DRIVE_DEPLOY_URL: ${{ secrets.GOOGLE_DRIVE_DEPLOY_URL }}  # ✅ اضافه شد
       run: |
         echo "🤖 Starting bot..."
         timeout 340m python main.py || EXIT_CODE=$?
