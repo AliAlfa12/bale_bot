@@ -10,6 +10,10 @@ from utils import (
     download_file_with_headers, create_rar_parts, clean_files_safe,
     sanitize_website_name
 )
+from features.user_settings import (
+    get_user_settings, set_download_type, set_google_drive_folder,
+    upload_to_google_drive, DOWNLOAD_TYPES
+)
 from features.menu import (
     show_main_menu, show_help, ask_for_repo_name, ask_for_command, 
     ask_for_ai_question, ask_for_download_link, ask_for_website_url, 
@@ -76,32 +80,82 @@ def get_updates(offset):
     return []
 
 def handle_rar_download(chat_id, file_path, description, cleanup=True):
-    """✅ RAR download handler"""
+    """✅ RAR download - with Google Drive support"""
     try:
-        logger.info(f"RAR: {file_path}")
-        base_name = os.path.splitext(os.path.basename(file_path))[0]
-        parts = create_rar_parts(file_path, base_name, 19)
+        user_settings = get_user_settings(chat_id)
+        download_type = user_settings.get('download_type', 'direct')
         
-        if cleanup:
-            try:
-                os.remove(file_path)
-            except:
-                pass
+        logger.info(f"Download type: {download_type}")
         
-        if parts:
-            if len(parts) == 1:
-                send_document(chat_id, parts[0], f"✅ {description}")
+        # ✅ نوع 1: دانلود مستقیم (پارت‌بندی)
+        if download_type == 'direct':
+            logger.info(f"Direct download: {file_path}")
+            base_name = os.path.splitext(os.path.basename(file_path))[0]
+            parts = create_rar_parts(file_path, base_name, 19)
+            
+            if cleanup:
+                try:
+                    os.remove(file_path)
+                except:
+                    pass
+            
+            if parts:
+                if len(parts) == 1:
+                    send_document(chat_id, parts[0], f"✅ {description}")
+                else:
+                    send_message(chat_id, f"📦 {len(parts)} پارت RAR")
+                    for part_file in parts:
+                        send_document(chat_id, part_file, f"📎 {part_file}")
+                    clean_files_safe(parts)
             else:
-                send_message(chat_id, f"📦 {len(parts)} پارت RAR")
-                for part_file in parts:
-                    send_document(chat_id, part_file, f"📎 {part_file}")
-                clean_files_safe(parts)
-        else:
-            send_message(chat_id, "❌ خطا در فشرده‌سازی")
+                send_message(chat_id, "❌ خطا در فشرده‌سازی")
+            
+            return True
         
-        return bool(parts)
+        # ✅ نوع 2: آپلود به Google Drive
+        elif download_type == 'google_drive':
+            logger.info(f"Google Drive upload: {file_path}")
+            
+            folder_id = user_settings.get('google_drive_folder_id')
+            if not folder_id:
+                send_message(chat_id, "❌ Folder ID تنظیم نشده است\n\nلطفاً تنظیمات را بررسی کنید")
+                return False
+            
+            deploy_url = os.environ.get('GOOGLE_DRIVE_DEPLOY_URL')
+            if not deploy_url:
+                send_message(chat_id, "❌ Deploy URL تنظیم نشده است")
+                logger.error("GOOGLE_DRIVE_DEPLOY_URL not set")
+                return False
+            
+            send_message(chat_id, "⏳ در حال آپلود به Google Drive...")
+            
+            # فشرده‌سازی بدون پارت‌بندی
+            try:
+                rar_file = os.path.splitext(file_path)[0] + '.rar'
+                cmd = f'rar a "{rar_file}" "{file_path}"'
+                subprocess.run(shlex.split(cmd), check=True, capture_output=True, timeout=300)
+                logger.info(f"RAR created: {rar_file}")
+            except Exception as e:
+                logger.error(f"RAR creation error: {e}")
+                send_message(chat_id, f"❌ خطا در فشرده‌سازی: {str(e)[:100]}")
+                return False
+            
+            # آپلود
+            success, message = upload_to_google_drive(rar_file, folder_id, deploy_url)
+            
+            # پاک‌سازی
+            if cleanup:
+                try:
+                    os.remove(file_path)
+                    os.remove(rar_file)
+                except:
+                    pass
+            
+            send_message(chat_id, message)
+            return success
+    
     except Exception as e:
-        logger.error(f"RAR error: {e}")
+        logger.error(f"handle_rar_download error: {e}")
         send_message(chat_id, f"❌ خطا: {str(e)[:150]}")
         return False
 
@@ -138,6 +192,25 @@ def process_callback(chat_id, message_id, data):
         elif data == "menu_youtube":
             user_states[chat_id] = {"action": "waiting_for_youtube"}
             ask_for_youtube_url(chat_id)
+
+        elif data == "menu_settings":
+            from features.menu import show_settings_menu
+            show_settings_menu(chat_id)
+        elif data == "settings_menu":
+            from features.menu import show_settings_menu
+            show_settings_menu(chat_id)
+        elif data == "settings_download_direct":
+            set_download_type(chat_id, 'direct')
+            send_message(chat_id, "✅ نوع دانلود: دانلود مستقیم (پارت‌بندی)")
+            from features.menu import show_settings_menu
+            show_settings_menu(chat_id)
+        elif data == "settings_download_gdrive":
+            set_download_type(chat_id, 'google_drive')
+            send_message(chat_id, "✅ نوع دانلود: آپلود به Google Drive")
+            from features.menu import show_gdrive_settings
+            show_gdrive_settings(chat_id)
+            user_states[chat_id] = {"action": "waiting_for_gdrive_folder_id"}
+        
         elif data == "menu_network_test":
             test_site_accessibility(chat_id)
             show_main_menu(chat_id)
@@ -333,6 +406,18 @@ def process_message(chat_id, text):
                     except:
                         pass
                 show_main_menu(chat_id)
+
+            elif action == "waiting_for_gdrive_folder_id":
+                folder_id = text.strip()
+                del user_states[chat_id]
+                
+                if set_google_drive_folder(chat_id, folder_id):
+                    send_message(chat_id, f"✅ Folder ID ذخیره شد: `{folder_id}`")
+                    from features.menu import show_settings_menu
+                    show_settings_menu(chat_id)
+                else:
+                    send_message(chat_id, "❌ خطا در ذخیره Folder ID")
+                    show_main_menu(chat_id)
             
             elif action == "waiting_for_youtube":
                 url = text.strip()
