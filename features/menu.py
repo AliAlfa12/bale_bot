@@ -1,21 +1,28 @@
 from utils import send_message, create_inline_keyboard, remove_reply_keyboard
 
 def show_main_menu(chat_id):
-    buttons = [
-        {"text": "🔍 جستجو در گیت‌هاب", "callback_data": "menu_search"},  # تغییر نام
-        {"text": "📦 دانلود ریپو", "callback_data": "menu_download"},
-        {"text": "🏷️ مشاهده ریلیزها", "callback_data": "menu_releases"},
-        {"text": "💻 اجرای دستور لینوکسی", "callback_data": "menu_cli"},
-        {"text": "🤖 سوال از هوش مصنوعی", "callback_data": "menu_ai"},
-        {"text": "📥 دانلود فایل از لینک", "callback_data": "menu_download_link"},
-        {"text": "🌐 دانلود کامل وب‌سایت", "callback_data": "menu_download_website"},
-        {"text": "🔗 استخراج لینک‌های وب‌سایت", "callback_data": "menu_extract_links"},
-        {"text": "🎬 دانلود از یوتیوب", "callback_data": "menu_youtube"},
-        {"text": "📡 تست دسترسی به سایت‌ها", "callback_data": "menu_network_test"},
-        {"text": "❓ راهنما", "callback_data": "menu_help"}
+    """نمایش منوی اصلی"""
+    text = """🤖 **ربات دانلودر پیشرفته**
+
+لطفاً یکی از گزینه‌ها را انتخاب کنید:"""
+    
+    btns = [
+        {"text": "🔍 جستجوی GitHub", "callback_data": "menu_search"},
+        {"text": "📥 دانلود ریپو", "callback_data": "menu_download"},
+        {"text": "🏷️ ریلیزها", "callback_data": "menu_releases"},
+        {"text": "💻 دستورات Shell", "callback_data": "menu_cli"},
+        {"text": "🤖 Gemini AI", "callback_data": "menu_ai"},
+        {"text": "📁 دانلود فایل", "callback_data": "menu_download_link"},
+        {"text": "🌐 دانلود وبسایت", "callback_data": "menu_download_website"},
+        {"text": "🔗 استخراج لینک", "callback_data": "menu_extract_links"},
+        {"text": "🎬 یوتیوب", "callback_data": "menu_youtube"},
+        {"text": "⚙️ تنظیمات", "callback_data": "menu_settings"},  # ✅ اضافه شد
+        {"text": "🌐 تست شبکه", "callback_data": "menu_network_test"},
+        {"text": "❓ راهنما", "callback_data": "menu_help"},
     ]
-    reply_markup = create_inline_keyboard(buttons, columns=1)
-    send_message(chat_id, "🤖 **ربات دانلودر پیشرفته**\nلطفاً یکی از گزینه‌ها را انتخاب کنید:", reply_markup)
+    
+    reply_markup = create_inline_keyboard(btns, columns=2)
+    send_message(chat_id, text, reply_markup)
 
 def show_help(chat_id):
     text = (
